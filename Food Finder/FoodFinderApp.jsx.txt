@@ -1,0 +1,334 @@
+import React, { useState, useMemo } from 'react';
+import { Search, MapPin, DollarSign, Star, Navigation, Trophy, ChefHat, Filter } from 'lucide-react';
+
+// --- Mock Data ---
+
+// User's current location (mock coordinates: 0,0 is the center)
+const USER_LOCATION = { x: 0, y: 0 };
+
+const RESTAURANTS = [
+  {
+    id: 1,
+    name: "Spice Paradise",
+    coords: { x: 2, y: 3 }, // Approx 3.6km away
+    rating: 4.8,
+    menu: [
+      { name: "Chicken Biryani", price: 350 },
+      { name: "Paneer Butter Masala", price: 280 },
+      { name: "Naan", price: 40 }
+    ]
+  },
+  {
+    id: 2,
+    name: "Budget Bites",
+    coords: { x: 8, y: 8 }, // Approx 11.3km away (Far)
+    rating: 3.5, // Lower quality
+    menu: [
+      { name: "Chicken Biryani", price: 150 }, // Very cheap
+      { name: "Veg Biryani", price: 120 },
+      { name: "Fried Rice", price: 100 }
+    ]
+  },
+  {
+    id: 3,
+    name: "The Royal Bowl",
+    coords: { x: 1, y: 1 }, // Approx 1.4km away (Very Close)
+    rating: 4.2,
+    menu: [
+      { name: "Chicken Biryani", price: 280 },
+      { name: "Mutton Biryani", price: 400 },
+      { name: "Tandoori Chicken", price: 300 }
+    ]
+  },
+  {
+    id: 4,
+    name: "Gourmet Hub",
+    coords: { x: 5, y: 0 }, // Approx 5km away
+    rating: 4.9, // Excellent quality
+    menu: [
+      { name: "Hyderabadi Biryani", price: 450 }, // Expensive
+      { name: "Truffle Pasta", price: 550 }
+    ]
+  },
+  {
+    id: 5,
+    name: "Midnight Express",
+    coords: { x: 3, y: 4 }, // Approx 5km away
+    rating: 4.0,
+    menu: [
+      { name: "Chicken Biryani", price: 220 },
+      { name: "Shawarma", price: 150 }
+    ]
+  }
+];
+
+// --- Helper Functions ---
+
+const calculateDistance = (loc1, loc2) => {
+  return Math.sqrt(Math.pow(loc2.x - loc1.x, 2) + Math.pow(loc2.y - loc1.y, 2)).toFixed(1);
+};
+
+// Normalize a value between 0 and 1 relative to the min and max in the dataset
+const normalize = (value, min, max, invert = false) => {
+  if (max === min) return 1;
+  const normalized = (value - min) / (max - min);
+  return invert ? 1 - normalized : normalized;
+};
+
+const FoodRecommenderApp = () => {
+  const [searchTerm, setSearchTerm] = useState('Biryani');
+  const [weights, setWeights] = useState({ price: 0.4, distance: 0.3, quality: 0.3 });
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Core Logic: Filter, Calculate Metrics, and Rank
+  const results = useMemo(() => {
+    if (!searchTerm) return [];
+
+    // 1. Find all restaurants that have the item
+    let matches = [];
+    RESTAURANTS.forEach(r => {
+      const item = r.menu.find(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      if (item) {
+        matches.push({
+          restaurant: r.name,
+          restaurantId: r.id,
+          rating: r.rating,
+          coords: r.coords,
+          itemName: item.name,
+          price: item.price,
+          distance: parseFloat(calculateDistance(USER_LOCATION, r.coords))
+        });
+      }
+    });
+
+    if (matches.length === 0) return [];
+
+    // 2. Find Min/Max for normalization
+    const prices = matches.map(m => m.price);
+    const distances = matches.map(m => m.distance);
+    const ratings = matches.map(m => m.rating);
+
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const minDist = Math.min(...distances);
+    const maxDist = Math.max(...distances);
+    const minRate = Math.min(...ratings);
+    const maxRate = Math.max(...ratings);
+
+    // 3. Score each match
+    matches = matches.map(m => {
+      // Score calculation (0 to 100)
+      // Cheaper is better (invert)
+      const priceScore = normalize(m.price, minPrice, maxPrice, true) * 100;
+      // Closer is better (invert)
+      const distScore = normalize(m.distance, minDist, maxDist, true) * 100;
+      // Higher rating is better
+      const rateScore = normalize(m.rating, minRate, maxRate, false) * 100;
+
+      // Weighted Total Score
+      const totalScore = (
+        (priceScore * weights.price) +
+        (distScore * weights.distance) +
+        (rateScore * weights.quality)
+      );
+
+      return {
+        ...m,
+        scores: { price: priceScore, dist: distScore, rate: rateScore, total: totalScore },
+        tags: []
+      };
+    });
+
+    // 4. Identify Superlatives (Cheapest, Nearest, Best Quality)
+    // We sort specifically to find the absolute best in each category to tag them
+    const cheapest = [...matches].sort((a, b) => a.price - b.price)[0];
+    const nearest = [...matches].sort((a, b) => a.distance - b.distance)[0];
+    const bestQuality = [...matches].sort((a, b) => b.rating - a.rating)[0];
+
+    matches.forEach(m => {
+      if (m.id === cheapest.id && m.price === cheapest.price) m.tags.push({ label: 'Cheapest', color: 'bg-green-100 text-green-700', icon: DollarSign });
+      if (m.id === nearest.id && m.distance === nearest.distance) m.tags.push({ label: 'Nearest', color: 'bg-blue-100 text-blue-700', icon: MapPin });
+      if (m.id === bestQuality.id && m.rating === bestQuality.rating) m.tags.push({ label: 'Top Quality', color: 'bg-yellow-100 text-yellow-700', icon: Star });
+    });
+
+    // 5. Final Sort by Total Score (Best Option first)
+    return matches.sort((a, b) => b.scores.total - a.scores.total);
+  }, [searchTerm, weights]);
+
+  const bestOption = results.length > 0 ? results[0] : null;
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-12">
+      {/* Header */}
+      <div className="bg-orange-600 text-white p-6 shadow-lg rounded-b-3xl">
+        <h1 className="text-3xl font-bold flex items-center gap-2 mb-2">
+          <ChefHat size={32} />
+          FoodFinder
+        </h1>
+        <p className="opacity-90">Find the perfect balance of price, distance, and taste.</p>
+
+        {/* Search Bar */}
+        <div className="mt-6 relative">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="What are you craving? (e.g., Biryani)"
+            className="w-full pl-12 pr-4 py-4 rounded-xl text-slate-900 shadow-xl focus:outline-none focus:ring-4 focus:ring-orange-300 transition-all font-medium"
+          />
+          <Search className="absolute left-4 top-4 text-slate-400" />
+        </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-4 mt-8">
+        {/* Controls / Filters */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-slate-700">
+            {results.length} Result{results.length !== 1 ? 's' : ''} found
+          </h2>
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 text-sm font-semibold text-orange-600 bg-orange-50 px-4 py-2 rounded-lg hover:bg-orange-100 transition-colors"
+          >
+            <Filter size={16} />
+            Adjust Priorities
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8 animate-fade-in-down">
+            <h3 className="font-semibold mb-4 text-slate-600">What matters most to you?</h3>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm font-medium">Price Importance</span>
+                  <span className="text-xs text-slate-400">{(weights.price * 100).toFixed(0)}%</span>
+                </div>
+                <input 
+                  type="range" min="0" max="1" step="0.1" 
+                  value={weights.price} 
+                  onChange={(e) => setWeights({...weights, price: parseFloat(e.target.value)})}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-green-500"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm font-medium">Distance Importance</span>
+                  <span className="text-xs text-slate-400">{(weights.distance * 100).toFixed(0)}%</span>
+                </div>
+                <input 
+                  type="range" min="0" max="1" step="0.1" 
+                  value={weights.distance} 
+                  onChange={(e) => setWeights({...weights, distance: parseFloat(e.target.value)})}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm font-medium">Quality Importance</span>
+                  <span className="text-xs text-slate-400">{(weights.quality * 100).toFixed(0)}%</span>
+                </div>
+                <input 
+                  type="range" min="0" max="1" step="0.1" 
+                  value={weights.quality} 
+                  onChange={(e) => setWeights({...weights, quality: parseFloat(e.target.value)})}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Results List */}
+        <div className="space-y-6">
+          {results.map((item, index) => {
+            const isBestOption = index === 0;
+            return (
+              <div 
+                key={`${item.restaurantId}-${index}`}
+                className={`
+                  relative bg-white rounded-2xl p-5 shadow-sm border-2 transition-all hover:shadow-md
+                  ${isBestOption ? 'border-orange-500 ring-4 ring-orange-100 scale-[1.02]' : 'border-transparent'}
+                `}
+              >
+                {/* Best Option Badge */}
+                {isBestOption && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-500 to-red-500 text-white px-4 py-1 rounded-full text-sm font-bold shadow-md flex items-center gap-1">
+                    <Trophy size={14} />
+                    Best Option
+                  </div>
+                )}
+
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">{item.restaurant}</h3>
+                    <p className="text-slate-500 text-sm font-medium">{item.itemName}</p>
+                    
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {item.tags.map((tag, tIdx) => (
+                        <span key={tIdx} className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 ${tag.color}`}>
+                          <tag.icon size={12} />
+                          {tag.label}
+                        </span>
+                      ))}
+                      {!item.tags.length && !isBestOption && (
+                         <span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-500">
+                           Standard Option
+                         </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-slate-800">₹{item.price}</div>
+                    <div className="text-xs text-slate-400 font-medium mt-1">per plate</div>
+                  </div>
+                </div>
+
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-slate-100">
+                  <div className="text-center">
+                    <div className="flex justify-center text-slate-400 mb-1"><MapPin size={18} /></div>
+                    <div className="font-bold text-slate-700">{item.distance} km</div>
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider">Distance</div>
+                  </div>
+                  <div className="text-center border-l border-r border-slate-100">
+                    <div className="flex justify-center text-slate-400 mb-1"><Star size={18} /></div>
+                    <div className="font-bold text-slate-700 flex items-center justify-center gap-1">
+                      {item.rating}
+                    </div>
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider">Quality</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="flex justify-center text-slate-400 mb-1"><Navigation size={18} /></div>
+                    <div className="font-bold text-slate-700">~{Math.ceil(item.distance * 5 + 10)} min</div>
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider">Time</div>
+                  </div>
+                </div>
+                
+                {isBestOption && (
+                   <div className="mt-4 bg-orange-50 p-3 rounded-lg text-xs text-orange-800 font-medium text-center">
+                     Recommender Logic: High quality ({item.rating}) combined with reasonable price makes this the winner.
+                   </div>
+                )}
+              </div>
+            );
+          })}
+
+          {results.length === 0 && (
+            <div className="text-center py-12 text-slate-400">
+              <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Search size={32} />
+              </div>
+              <p className="text-lg">No restaurants found for "{searchTerm}"</p>
+              <p className="text-sm">Try searching for "Biryani", "Naan", or "Pasta"</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default FoodRecommenderApp;
