@@ -1,0 +1,322 @@
+import React, { useState, useEffect } from 'react';
+import { Clock, Plus, Trash2, Activity, Calendar, Sun, Moon, CheckCircle, BarChart3, BrainCircuit } from 'lucide-react';
+
+// --- UTILS & "SMART" SIMULATION LOGIC ---
+
+// Helper to convert "HH:MM" string to minutes from midnight
+const timeToMins = (timeStr) => {
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+};
+
+// Helper to convert minutes from midnight back to "HH:MM AM/PM"
+const minsToTime = (mins) => {
+  let h = Math.floor(mins / 60);
+  let m = mins % 60;
+  const ampm = h >= 12 && h < 24 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12; 
+  return `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
+
+// The "Fake AI" that guesses priority and duration based on keywords
+const simulateSmartAnalysis = (taskName) => {
+  const lower = taskName.toLowerCase();
+  let priority = 'Medium';
+  let duration = 60; // Default 1 hour
+  let difficulty = 'Normal';
+
+  // Heuristic Rules
+  if (lower.includes('urgent') || lower.includes('deadline')) {
+    priority = 'Critical';
+    duration = 45;
+    difficulty = 'High';
+  } else if (lower.includes('work') || lower.includes('project') || lower.includes('code') || lower.includes('study')) {
+    priority = 'High';
+    duration = 90;
+    difficulty = 'High';
+  } else if (lower.includes('meeting') || lower.includes('call')) {
+    priority = 'High';
+    duration = 30;
+    difficulty = 'Medium';
+  } else if (lower.includes('gym') || lower.includes('workout') || lower.includes('run')) {
+    priority = 'Medium';
+    duration = 60;
+    difficulty = 'High';
+  } else if (lower.includes('lunch') || lower.includes('dinner') || lower.includes('breakfast')) {
+    priority = 'High'; // Meals are important!
+    duration = 45;
+    difficulty = 'Low';
+  } else if (lower.includes('read') || lower.includes('meditate') || lower.includes('relax')) {
+    priority = 'Low';
+    duration = 30;
+    difficulty = 'Low';
+  } else if (lower.includes('clean') || lower.includes('laundry') || lower.includes('chore')) {
+    priority = 'Medium';
+    duration = 45;
+    difficulty = 'Medium';
+  }
+
+  return { priority, duration, difficulty };
+};
+
+export default function App() {
+  const [wakeTime, setWakeTime] = useState('07:00');
+  const [bedTime, setBedTime] = useState('23:00');
+  const [taskInput, setTaskInput] = useState('');
+  const [tasks, setTasks] = useState([]);
+  const [schedule, setSchedule] = useState([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [daySaturation, setDaySaturation] = useState(0);
+
+  // Add a task with simulated "analysis"
+  const handleAddTask = (e) => {
+    e.preventDefault();
+    if (!taskInput.trim()) return;
+
+    const analysis = simulateSmartAnalysis(taskInput);
+    const newTask = {
+      id: Date.now(),
+      name: taskInput,
+      ...analysis
+    };
+
+    setTasks([...tasks, newTask]);
+    setTaskInput('');
+  };
+
+  const removeTask = (id) => {
+    setTasks(tasks.filter(t => t.id !== id));
+  };
+
+  // The Scheduling Algorithm
+  const generateSchedule = () => {
+    setIsGenerating(true);
+    setSchedule([]);
+
+    // Simulate "processing" time
+    setTimeout(() => {
+      const startMins = timeToMins(wakeTime);
+      const endMins = timeToMins(bedTime);
+      let currentMins = startMins;
+      const newSchedule = [];
+
+      // 1. Sort tasks by Priority (Critical > High > Medium > Low)
+      const priorityOrder = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
+      const sortedTasks = [...tasks].sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+
+      // 2. Allocate time slots
+      sortedTasks.forEach(task => {
+        if (currentMins + task.duration > endMins) {
+          // Task doesn't fit
+          newSchedule.push({ ...task, status: 'overflow', timeRange: 'Not enough time!' });
+        } else {
+          // Task fits
+          const startTime = minsToTime(currentMins);
+          const endTime = minsToTime(currentMins + task.duration);
+          
+          newSchedule.push({
+            ...task,
+            status: 'scheduled',
+            startMins: currentMins,
+            endMins: currentMins + task.duration,
+            timeRange: `${startTime} - ${endTime}`
+          });
+          
+          currentMins += task.duration + 15; // Add 15 min buffer/break between tasks
+        }
+      });
+
+      // Calculate Saturation (Used Time / Total Available Time)
+      const totalAvailable = endMins - startMins;
+      const usedTime = currentMins - startMins;
+      let saturation = Math.round((usedTime / totalAvailable) * 100);
+      if (saturation > 100) saturation = 100;
+
+      setDaySaturation(saturation);
+      setSchedule(newSchedule);
+      setIsGenerating(false);
+    }, 1500);
+  };
+
+  const getPriorityColor = (p) => {
+    switch(p) {
+      case 'Critical': return 'text-red-600 bg-red-50 border-red-200';
+      case 'High': return 'text-orange-600 bg-orange-50 border-orange-200';
+      case 'Medium': return 'text-blue-600 bg-blue-50 border-blue-200';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-800 p-4 md:p-8">
+      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* LEFT COLUMN: INPUTS */}
+        <div className="bg-white p-6 rounded-3xl shadow-lg border border-gray-100 flex flex-col h-full">
+          <div className="mb-6 flex items-center gap-3 text-indigo-700">
+            <BrainCircuit size={28} />
+            <h1 className="text-2xl font-bold">Smart Planner AI</h1>
+          </div>
+
+          {/* Time Configuration */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-indigo-50 p-4 rounded-2xl">
+              <label className="flex items-center gap-2 text-sm font-semibold text-indigo-900 mb-2">
+                <Sun size={16} /> Wake Up
+              </label>
+              <input 
+                type="time" 
+                value={wakeTime}
+                onChange={(e) => setWakeTime(e.target.value)}
+                className="bg-transparent text-xl font-bold text-indigo-700 focus:outline-none w-full"
+              />
+            </div>
+            <div className="bg-indigo-50 p-4 rounded-2xl">
+              <label className="flex items-center gap-2 text-sm font-semibold text-indigo-900 mb-2">
+                <Moon size={16} /> Bed Time
+              </label>
+              <input 
+                type="time" 
+                value={bedTime}
+                onChange={(e) => setBedTime(e.target.value)}
+                className="bg-transparent text-xl font-bold text-indigo-700 focus:outline-none w-full"
+              />
+            </div>
+          </div>
+
+          {/* Task Input */}
+          <form onSubmit={handleAddTask} className="relative mb-6">
+            <input
+              type="text"
+              value={taskInput}
+              onChange={(e) => setTaskInput(e.target.value)}
+              placeholder="e.g., 'Finish Project Report' or 'Go for a Run'"
+              className="w-full pl-5 pr-14 py-4 rounded-2xl border-2 border-gray-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none transition-all"
+            />
+            <button 
+              type="submit"
+              className="absolute right-2 top-2 bottom-2 bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 transition-colors shadow-md"
+            >
+              <Plus size={20} />
+            </button>
+          </form>
+
+          {/* Task List (Unscheduled) */}
+          <div className="flex-1 overflow-y-auto mb-6 space-y-3 pr-2">
+            {tasks.length === 0 && (
+              <div className="text-center text-gray-400 py-10">
+                <p>No tasks added yet.</p>
+                <p className="text-sm">Type a task and I'll analyze it!</p>
+              </div>
+            )}
+            {tasks.map(task => (
+              <div key={task.id} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl shadow-sm animate-fade-in hover:shadow-md transition-shadow">
+                <div>
+                  <p className="font-semibold text-gray-800">{task.name}</p>
+                  <div className="flex gap-2 mt-1">
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${getPriorityColor(task.priority)}`}>
+                      {task.priority} Priority
+                    </span>
+                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Clock size={10} /> {task.duration}m
+                    </span>
+                  </div>
+                </div>
+                <button onClick={() => removeTask(task.id)} className="text-gray-300 hover:text-red-500 transition-colors p-2">
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Generate Button */}
+          <button 
+            onClick={generateSchedule}
+            disabled={tasks.length === 0 || isGenerating}
+            className={`w-full py-4 rounded-2xl font-bold text-lg text-white shadow-lg flex justify-center items-center gap-2 transition-all ${tasks.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-gray-900 hover:scale-[1.02] active:scale-95'}`}
+          >
+            {isGenerating ? 'Optimizing Schedule...' : 'Generate Day Plan'} <Activity size={20} />
+          </button>
+        </div>
+
+        {/* RIGHT COLUMN: SCHEDULE & VISUALIZATION */}
+        <div className="bg-white p-6 rounded-3xl shadow-lg border border-gray-100 flex flex-col h-full relative overflow-hidden">
+          <div className="mb-6 flex justify-between items-center">
+             <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+               <Calendar className="text-indigo-600" /> Your Timeline
+             </h2>
+             {daySaturation > 0 && (
+               <div className="flex items-center gap-2 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                 <BarChart3 size={14} className="text-green-600" />
+                 <span className="text-xs font-bold text-green-700">{daySaturation}% Planned</span>
+               </div>
+             )}
+          </div>
+
+          {/* Day Saturation Bar */}
+          <div className="w-full bg-gray-100 rounded-full h-3 mb-6 overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-1000 ease-out"
+              style={{ width: `${daySaturation}%` }}
+            ></div>
+          </div>
+
+          {/* Timeline */}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2 relative">
+            {!schedule.length && !isGenerating && (
+              <div className="flex flex-col items-center justify-center h-full text-gray-300">
+                <Calendar size={48} className="mb-2 opacity-50" />
+                <p>Plan your day to see the timeline.</p>
+              </div>
+            )}
+
+            {isGenerating && (
+               <div className="flex flex-col items-center justify-center h-full space-y-4">
+                 <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                 <p className="text-gray-400 animate-pulse">Analyzing priorities...</p>
+               </div>
+            )}
+
+            {schedule.map((item, index) => (
+              <div key={index} className={`relative pl-8 pb-4 border-l-2 ${item.status === 'overflow' ? 'border-red-200 opacity-60' : 'border-indigo-100'}`}>
+                {/* Timeline Dot */}
+                <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 bg-white ${item.status === 'overflow' ? 'border-red-400' : 'border-indigo-500'}`}></div>
+                
+                {/* Content */}
+                <div className={`p-4 rounded-2xl border ${item.status === 'overflow' ? 'bg-red-50 border-red-100' : 'bg-white border-gray-100 shadow-sm'}`}>
+                  <div className="flex justify-between items-start mb-1">
+                    <span className={`text-xs font-bold ${item.status === 'overflow' ? 'text-red-500' : 'text-indigo-600'}`}>
+                      {item.timeRange}
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-medium">
+                      {item.difficulty} Effort
+                    </span>
+                  </div>
+                  
+                  <h3 className={`font-bold text-lg ${item.status === 'overflow' ? 'text-red-800 line-through' : 'text-gray-800'}`}>
+                    {item.name}
+                  </h3>
+
+                  {item.status === 'scheduled' && (
+                     <div className="mt-2 flex gap-2">
+                        <span className={`text-xs px-2 py-0.5 rounded-md bg-opacity-50 ${getPriorityColor(item.priority)}`}>
+                          {item.priority}
+                        </span>
+                     </div>
+                  )}
+                  {item.status === 'overflow' && (
+                    <p className="text-xs text-red-500 mt-1 font-bold flex items-center gap-1">
+                      <Activity size={12} /> Exceeds bed time!
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+        </div>
+      </div>
+    </div>
+  );
+}
