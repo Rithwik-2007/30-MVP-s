@@ -1,0 +1,3 @@
+This is a part of my discipline challenge and the proof of my progress. This MVP is called WatchSense.
+So the biggest problem of cinephiles is what to watch. This app helps you recommend movies based on time, weather
+and your mood and it also gives you the details of the movie like which universe it belongs to and what order that you should follow while watching it. And if it is an anime it also tells what episodes to skip

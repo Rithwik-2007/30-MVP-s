@@ -1,0 +1,364 @@
+import React, { useState } from 'react';
+import { Search, Cloud, Moon, Sun, Coffee, Wind, Tv, Film, ChevronRight, X, Clock, AlertCircle } from 'lucide-react';
+
+// --- MOCK DATABASE ---
+const MEDIA_DB = [
+  {
+    id: 1,
+    title: "The Dark Knight",
+    type: "Movie",
+    universe: "The Dark Knight Trilogy",
+    order: "2 of 3",
+    moods: ["Intense", "Dark", "Serious"],
+    weather: ["Rainy", "Cold", "Night"],
+    time: ["Night", "Late Night"],
+    desc: "Batman raises the stakes in his war on crime against the Joker."
+  },
+  {
+    id: 2,
+    title: "Iron Man",
+    type: "Movie",
+    universe: "Marvel Cinematic Universe (Infinity Saga)",
+    order: "Phase 1 - Movie 1",
+    moods: ["Excited", "Fun", "Action"],
+    weather: ["Sunny", "Clear"],
+    time: ["Afternoon", "Evening"],
+    desc: "Billionaire engineer Tony Stark creates a unique weaponized suit of armor."
+  },
+  {
+    id: 3,
+    title: "Naruto: Shippuden",
+    type: "Anime",
+    episodes: 500,
+    skip: "57-71, 90-112, 144-151, 170-171, 257-260, 271, 279-281, 284-295, 303-320",
+    moods: ["Inspiring", "Long-term", "Action"],
+    weather: ["Any"],
+    time: ["Any"],
+    desc: "Naruto returns to the village to chase his dreams and save his friend."
+  },
+  {
+    id: 4,
+    title: "One Piece",
+    type: "Anime",
+    episodes: "1000+",
+    skip: "54-61, 98-99, 102, 131-143, 196-206, 220-225, 279-283",
+    moods: ["Adventure", "Funny", "Emotional"],
+    weather: ["Sunny", "Windy"],
+    time: ["Morning", "Afternoon"],
+    desc: "Monkey D. Luffy sets off on an adventure to find the legendary One Piece."
+  },
+  {
+    id: 5,
+    title: "Blade Runner 2049",
+    type: "Movie",
+    universe: "Blade Runner Saga",
+    order: "Sequel to 1982 original",
+    moods: ["Contemplative", "Lonely", "Visual"],
+    weather: ["Rainy", "Foggy"],
+    time: ["Late Night"],
+    desc: "A young blade runner's discovery of a long-buried secret leads him to track down Rick Deckard."
+  },
+  {
+    id: 6,
+    title: "Your Name (Kimi no Na wa)",
+    type: "Anime Movie",
+    skip: null,
+    moods: ["Romantic", "Sad", "Hopeful"],
+    weather: ["Clear", "Starry"],
+    time: ["Evening"],
+    desc: "Two strangers find themselves linked in a bizarre way."
+  },
+  {
+    id: 7,
+    title: "The Conjuring",
+    type: "Movie",
+    universe: "The Conjuring Universe",
+    order: "Release Order: 1, Chronological: 2",
+    moods: ["Scary", "Thriller"],
+    weather: ["Stormy", "Night"],
+    time: ["Night"],
+    desc: "Paranormal investigators work to help a family terrorized by a dark presence."
+  },
+  {
+    id: 8,
+    title: "Attack on Titan",
+    type: "Anime",
+    skip: "None. Watch every second.",
+    moods: ["Shocking", "Intense", "Despair"],
+    weather: ["Cloudy", "Gloomy"],
+    time: ["Any"],
+    desc: "Humanity fights for survival against man-eating giants."
+  }
+];
+
+export default function MovieRecommender() {
+  const [activeTab, setActiveTab] = useState('recommend'); // 'recommend' | 'search'
+  const [selectedMedia, setSelectedMedia] = useState(null);
+  
+  // Simulation Inputs
+  const [time, setTime] = useState('Night');
+  const [weather, setWeather] = useState('Rainy');
+  const [mood, setMood] = useState('Intense');
+  const [recommendations, setRecommendations] = useState([]);
+  
+  // Search Inputs
+  const [query, setQuery] = useState('');
+
+  // --- LOGIC ---
+
+  const generateRecommendations = () => {
+    // Simple point-based filtering
+    const scored = MEDIA_DB.map(item => {
+      let score = 0;
+      if (item.time.includes(time) || item.time.includes("Any")) score += 2;
+      if (item.weather.includes(weather) || item.weather.includes("Any")) score += 2;
+      if (item.moods.includes(mood)) score += 5;
+      return { ...item, score };
+    });
+
+    // Sort by score and take top 3
+    const topPicks = scored.filter(i => i.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
+    setRecommendations(topPicks);
+  };
+
+  const handleSearch = (text) => {
+    setQuery(text);
+  };
+
+  const filteredSearch = MEDIA_DB.filter(m => 
+    m.title.toLowerCase().includes(query.toLowerCase()) || 
+    (m.universe && m.universe.toLowerCase().includes(query.toLowerCase()))
+  );
+
+  // --- COMPONENTS ---
+
+  const DetailModal = ({ item, onClose }) => {
+    if (!item) return null;
+    return (
+      <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+        <div className="bg-black border border-white w-full max-w-lg p-6 relative shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+          <button onClick={onClose} className="absolute top-4 right-4 hover:bg-white hover:text-black transition-colors p-1">
+            <X size={24} />
+          </button>
+          
+          <div className="flex gap-2 mb-4">
+             <span className="border border-white px-2 py-0.5 text-xs font-mono uppercase tracking-widest">{item.type}</span>
+             {item.universe && <span className="bg-white text-black px-2 py-0.5 text-xs font-mono font-bold uppercase tracking-widest">UNIVERSE</span>}
+          </div>
+
+          <h2 className="text-3xl font-bold font-serif mb-2 tracking-tight">{item.title}</h2>
+          <p className="text-zinc-400 font-mono text-sm mb-6 border-l-2 border-zinc-800 pl-3">{item.desc}</p>
+
+          <div className="space-y-4 font-mono text-sm">
+            {item.universe && (
+              <div className="flex flex-col gap-1">
+                <span className="text-zinc-500 uppercase text-xs">Belongs To</span>
+                <span className="text-white border-b border-zinc-800 pb-1">{item.universe}</span>
+                <span className="text-zinc-400 text-xs">Watch Order: <span className="text-white">{item.order}</span></span>
+              </div>
+            )}
+
+            {(item.type === 'Anime' || item.type === 'Anime Movie') && item.skip && (
+              <div className="bg-zinc-900 border border-zinc-700 p-3 mt-4">
+                <div className="flex items-center gap-2 mb-2 text-red-400">
+                  <AlertCircle size={14} />
+                  <span className="uppercase text-xs font-bold tracking-wider">Filler Warning</span>
+                </div>
+                <p className="text-zinc-300 text-xs leading-relaxed">
+                  Skip Episodes: <br/>
+                  <span className="text-white font-bold">{item.skip}</span>
+                </p>
+              </div>
+            )}
+            
+            <div className="pt-4 flex gap-2">
+              {item.moods.map(m => (
+                <span key={m} className="text-[10px] border border-zinc-700 px-2 py-1 text-zinc-500 rounded-full">{m}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-white selection:text-black">
+      
+      {/* HEADER */}
+      <header className="border-b border-zinc-800 p-6 flex justify-between items-center sticky top-0 bg-black/95 backdrop-blur z-40">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-white flex items-center justify-center">
+            <Film size={20} className="text-black" />
+          </div>
+          <h1 className="text-xl font-bold tracking-widest font-serif">MONO.CINE</h1>
+        </div>
+        <nav className="flex gap-6 text-sm font-mono text-zinc-500">
+          <button 
+            onClick={() => setActiveTab('recommend')}
+            className={`hover:text-white transition-colors ${activeTab === 'recommend' ? 'text-white underline underline-offset-4 decoration-2' : ''}`}
+          >
+            RECOMMEND
+          </button>
+          <button 
+            onClick={() => setActiveTab('search')}
+            className={`hover:text-white transition-colors ${activeTab === 'search' ? 'text-white underline underline-offset-4 decoration-2' : ''}`}
+          >
+            LIBRARY
+          </button>
+        </nav>
+      </header>
+
+      <main className="max-w-2xl mx-auto p-6">
+        
+        {/* RECOMMENDATION ENGINE */}
+        {activeTab === 'recommend' && (
+          <div className="space-y-12 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-2 text-center py-8">
+              <p className="font-mono text-xs text-zinc-500 uppercase tracking-[0.2em]">The Simulation</p>
+              <h2 className="text-3xl md:text-4xl font-serif">Set your variables.</h2>
+            </div>
+
+            {/* Inputs Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* TIME */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 font-mono text-xs text-zinc-400 border-b border-zinc-800 pb-2">
+                  <Clock size={12} /> TIME
+                </label>
+                <div className="flex flex-col gap-2">
+                  {['Morning', 'Afternoon', 'Night', 'Late Night'].map(t => (
+                    <button 
+                      key={t}
+                      onClick={() => setTime(t)}
+                      className={`text-left px-3 py-2 text-sm border transition-all ${time === t ? 'bg-white text-black border-white font-bold' : 'border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* WEATHER */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 font-mono text-xs text-zinc-400 border-b border-zinc-800 pb-2">
+                  <Cloud size={12} /> WEATHER
+                </label>
+                <div className="flex flex-col gap-2">
+                  {['Sunny', 'Rainy', 'Cloudy', 'Stormy'].map(w => (
+                    <button 
+                      key={w}
+                      onClick={() => setWeather(w)}
+                      className={`text-left px-3 py-2 text-sm border transition-all ${weather === w ? 'bg-white text-black border-white font-bold' : 'border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}
+                    >
+                      {w}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* MOOD */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 font-mono text-xs text-zinc-400 border-b border-zinc-800 pb-2">
+                  <Coffee size={12} /> MOOD
+                </label>
+                <div className="flex flex-col gap-2">
+                  {['Intense', 'Funny', 'Sad', 'Inspiring', 'Scary'].map(m => (
+                    <button 
+                      key={m}
+                      onClick={() => setMood(m)}
+                      className={`text-left px-3 py-2 text-sm border transition-all ${mood === m ? 'bg-white text-black border-white font-bold' : 'border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={generateRecommendations}
+              className="w-full py-4 bg-white text-black font-bold font-mono uppercase tracking-widest hover:bg-zinc-200 transition-colors"
+            >
+              Initialize Search
+            </button>
+
+            {/* RESULTS */}
+            {recommendations.length > 0 && (
+              <div className="space-y-4 pt-8 border-t border-zinc-900">
+                <p className="font-mono text-xs text-zinc-500 mb-4">/// RESULTS_FOUND: {recommendations.length}</p>
+                {recommendations.map((item, idx) => (
+                  <div 
+                    key={item.id} 
+                    onClick={() => setSelectedMedia(item)}
+                    className="group border border-zinc-800 p-5 hover:border-white transition-all cursor-pointer flex justify-between items-center"
+                  >
+                    <div>
+                      <div className="flex gap-2 mb-1">
+                        <span className="text-[10px] text-zinc-500 font-mono uppercase">{item.type}</span>
+                        {item.type === 'Anime' && <span className="text-[10px] text-zinc-300 font-mono uppercase">Check Fillers</span>}
+                      </div>
+                      <h3 className="text-xl font-serif group-hover:underline decoration-1 underline-offset-4">{item.title}</h3>
+                    </div>
+                    <ChevronRight className="text-zinc-600 group-hover:text-white transition-colors" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SEARCH LIBRARY */}
+        {activeTab === 'search' && (
+          <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+             <div className="relative">
+               <input 
+                 type="text" 
+                 placeholder="Search universe, title or genre..." 
+                 value={query}
+                 onChange={(e) => handleSearch(e.target.value)}
+                 className="w-full bg-black border-b border-zinc-700 p-4 pl-0 text-xl font-serif outline-none focus:border-white transition-colors placeholder:text-zinc-800"
+               />
+               <Search className="absolute right-0 top-4 text-zinc-700" size={20} />
+             </div>
+
+             <div className="grid grid-cols-1 gap-4">
+               {filteredSearch.map(item => (
+                 <div 
+                   key={item.id}
+                   onClick={() => setSelectedMedia(item)}
+                   className="flex justify-between items-start border border-zinc-900 p-4 hover:border-zinc-600 cursor-pointer transition-colors"
+                 >
+                   <div>
+                     <h3 className="font-bold text-lg">{item.title}</h3>
+                     {item.universe && <p className="text-xs text-zinc-500 font-mono mt-1">{item.universe}</p>}
+                   </div>
+                   {item.type === 'Anime' ? (
+                     <span className="text-[10px] border border-zinc-800 px-1 py-0.5 text-zinc-500">ANIME</span>
+                   ) : (
+                     <span className="text-[10px] bg-zinc-900 px-1 py-0.5 text-zinc-500">FILM</span>
+                   )}
+                 </div>
+               ))}
+               {filteredSearch.length === 0 && (
+                 <div className="text-center py-20 text-zinc-800 font-mono">
+                   NO_DATA_FOUND
+                 </div>
+               )}
+             </div>
+          </div>
+        )}
+      </main>
+
+      {/* FOOTER */}
+      <footer className="fixed bottom-0 w-full p-4 border-t border-zinc-900 bg-black text-[10px] font-mono text-zinc-700 flex justify-between uppercase">
+        <span>V.1.0.0 [SIMULATION]</span>
+        <span>Minimalist System</span>
+      </footer>
+
+      {/* DETAIL MODAL */}
+      {selectedMedia && <DetailModal item={selectedMedia} onClose={() => setSelectedMedia(null)} />}
+
+    </div>
+  );
+}
