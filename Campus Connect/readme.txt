@@ -1,0 +1,2 @@
+This is a part of my discipline challenge and the proof of my progress. This MVP is called Campus Connect.
+Ever wondered if you can clarify your doubts about an institution or a company directly without searching for it 64 different websites. Campus Connect solves that you can directly talk to the people who studying or working in the organization currently. You can find people related to that organization at one place so you don't need search for them in 64 different places 

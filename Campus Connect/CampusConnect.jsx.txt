@@ -1,0 +1,347 @@
+import React, { useState } from 'react';
+import { Search, MapPin, Building2, User, GraduationCap, Briefcase, MessageCircle, Phone, Mail, ChevronLeft, ChevronRight, Send, CheckCircle } from 'lucide-react';
+
+// --- MOCK DATABASE ---
+
+const INSTITUTIONS = [
+  {
+    id: 1,
+    name: "IIT Bombay",
+    type: "College",
+    location: "Mumbai, Maharashtra",
+    desc: "Premier engineering institute known for its research and vibrant campus life.",
+    logoColor: "bg-blue-600"
+  },
+  {
+    id: 2,
+    name: "BITS Pilani",
+    type: "College",
+    location: "Pilani, Rajasthan",
+    desc: "Known for its flexible academic structure and zero attendance policy.",
+    logoColor: "bg-yellow-500"
+  },
+  {
+    id: 3,
+    name: "Google India",
+    type: "Company",
+    location: "Bangalore, Hyderabad, Gurgaon",
+    desc: "Leading tech giant offering roles in software engineering, AI, and cloud.",
+    logoColor: "bg-green-500"
+  },
+  {
+    id: 4,
+    name: "Delhi University",
+    type: "College",
+    location: "New Delhi",
+    desc: "A collegiate public central university known for high cutoffs and political vibrancy.",
+    logoColor: "bg-purple-600"
+  }
+];
+
+const INSIDERS = [
+  // IIT Bombay
+  { id: 101, instId: 1, name: "Arjun Mehta", role: "Student", designation: "B.Tech CSE, 3rd Year", verified: true, talksAbout: ["Hostels", "Placements", "Clubs"] },
+  { id: 102, instId: 1, name: "Dr. S. K. Gupta", role: "Faculty", designation: "Professor, Dept of Physics", verified: true, talksAbout: ["Research", "Curriculum"] },
+  
+  // BITS Pilani
+  { id: 201, instId: 2, name: "Sneha Reddy", role: "Alumni", designation: "Class of 2021", verified: true, talksAbout: ["Startup Culture", "Dual Degree"] },
+  { id: 202, instId: 2, name: "Rahul Verma", role: "Student", designation: "M.Sc Economics, 2nd Year", verified: true, talksAbout: ["Mess Food", "Sports"] },
+
+  // Google
+  { id: 301, instId: 3, name: "Priya Sharma", role: "Employee", designation: "L4 Software Engineer", verified: true, talksAbout: ["Interviews", "Work Life Balance"] },
+  { id: 302, instId: 3, name: "Amit Patel", role: "Employee", designation: "Product Manager", verified: true, talksAbout: ["Product Strategy", "Hiring"] },
+
+  // DU
+  { id: 401, instId: 4, name: "Vikram Singh", role: "Student", designation: "BA English Hons, Hindu College", verified: true, talksAbout: ["Campus Politics", "Societies"] }
+];
+
+const MOCK_CHATS = {
+  101: [
+    { sender: 'them', text: "Hey! I'm Arjun. Happy to help with any questions about IIT-B hostels or the CSE workload." }
+  ],
+  201: [
+    { sender: 'them', text: "Hi there! BITS has a unique culture. Ask me anything about the zero attendance policy." }
+  ]
+};
+
+// --- COMPONENTS ---
+
+const Badge = ({ role }) => {
+  const styles = {
+    Student: "bg-blue-100 text-blue-700 border-blue-200",
+    Faculty: "bg-purple-100 text-purple-700 border-purple-200",
+    Employee: "bg-green-100 text-green-700 border-green-200",
+    Alumni: "bg-orange-100 text-orange-700 border-orange-200"
+  };
+  
+  const icons = {
+    Student: <GraduationCap size={12} />,
+    Faculty: <Building2 size={12} />,
+    Employee: <Briefcase size={12} />,
+    Alumni: <GraduationCap size={12} />
+  };
+
+  return (
+    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide ${styles[role] || "bg-gray-100"}`}>
+      {icons[role]} {role}
+    </span>
+  );
+};
+
+export default function CollegeConnect() {
+  const [view, setView] = useState('home'); // 'home', 'institution', 'chat'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedInst, setSelectedInst] = useState(null);
+  const [selectedInsider, setSelectedInsider] = useState(null);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+
+  // --- ACTIONS ---
+
+  const handleSearch = (e) => setSearchQuery(e.target.value);
+
+  const filteredInstitutions = INSTITUTIONS.filter(inst => 
+    inst.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    inst.location.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const openInstitution = (inst) => {
+    setSelectedInst(inst);
+    setView('institution');
+  };
+
+  const startChat = (insider) => {
+    setSelectedInsider(insider);
+    setChatHistory(MOCK_CHATS[insider.id] || [{ sender: 'them', text: `Hello! I see you're interested in ${selectedInst.name}. How can I help?` }]);
+    setView('chat');
+  };
+
+  const sendMessage = () => {
+    if (!chatInput.trim()) return;
+    const newMsg = { sender: 'me', text: chatInput };
+    setChatHistory([...chatHistory, newMsg]);
+    setChatInput('');
+
+    // Simulate Reply
+    setTimeout(() => {
+      setChatHistory(prev => [...prev, { 
+        sender: 'them', 
+        text: "That's a great question! Honestly, it depends on what you're looking for. The exposure here is great, but the workload can be heavy." 
+      }]);
+    }, 1500);
+  };
+
+  // --- VIEWS ---
+
+  // 1. HOME VIEW
+  if (view === 'home') {
+    return (
+      <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
+        {/* Navbar */}
+        <nav className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10 flex justify-between items-center">
+          <div className="flex items-center gap-2 text-indigo-600 font-bold text-xl">
+            <Building2 /> CampusConnect
+          </div>
+          <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden">
+            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
+          </div>
+        </nav>
+
+        {/* Hero Search */}
+        <div className="bg-indigo-600 px-6 py-12 text-center text-white">
+          <h1 className="text-3xl font-bold mb-2">Connect with the Real Insiders</h1>
+          <p className="text-indigo-100 mb-6">Stop guessing. Talk to students and faculty directly.</p>
+          <div className="max-w-md mx-auto relative text-gray-800">
+            <input 
+              type="text" 
+              placeholder="Search 'IIT Bombay', 'Google', 'Delhi'..." 
+              value={searchQuery}
+              onChange={handleSearch}
+              className="w-full pl-10 pr-4 py-3 rounded-full shadow-lg outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            <Search className="absolute left-4 top-3.5 text-gray-400" size={20} />
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="max-w-2xl mx-auto p-4 -mt-6">
+          {filteredInstitutions.map(inst => (
+            <div 
+              key={inst.id} 
+              onClick={() => openInstitution(inst)}
+              className="bg-white p-5 rounded-xl shadow-sm mb-4 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow flex gap-4 items-center"
+            >
+              <div className={`w-12 h-12 rounded-lg ${inst.logoColor} flex items-center justify-center text-white font-bold text-lg shrink-0`}>
+                {inst.name[0]}
+              </div>
+              <div className="flex-1">
+                <div className="flex justify-between items-start">
+                   <h3 className="font-bold text-lg">{inst.name}</h3>
+                   <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-full uppercase font-bold tracking-wider">{inst.type}</span>
+                </div>
+                <p className="text-sm text-gray-500 flex items-center gap-1 mb-1">
+                  <MapPin size={12} /> {inst.location}
+                </p>
+                <p className="text-xs text-gray-400 line-clamp-1">{inst.desc}</p>
+              </div>
+              <ChevronRight className="text-gray-300" />
+            </div>
+          ))}
+          {filteredInstitutions.length === 0 && (
+            <div className="text-center py-10 text-gray-400">No institutions found.</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 2. INSTITUTION DETAILS VIEW
+  if (view === 'institution') {
+    const institutionInsiders = INSIDERS.filter(i => i.instId === selectedInst.id);
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-2">
+            <button onClick={() => setView('home')} className="p-2 hover:bg-gray-100 rounded-full">
+              <ChevronLeft size={20} />
+            </button>
+            <h2 className="font-bold text-lg truncate">{selectedInst.name}</h2>
+          </div>
+        </div>
+
+        <div className="max-w-2xl mx-auto p-4 space-y-6">
+          {/* Header Card */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 text-center">
+            <div className={`w-20 h-20 mx-auto rounded-2xl ${selectedInst.logoColor} flex items-center justify-center text-white font-bold text-3xl mb-4 shadow-lg`}>
+              {selectedInst.name[0]}
+            </div>
+            <h1 className="text-2xl font-bold mb-1">{selectedInst.name}</h1>
+            <p className="text-gray-500 flex items-center justify-center gap-1 text-sm mb-4">
+              <MapPin size={14} /> {selectedInst.location}
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-lg">
+              {selectedInst.desc}
+            </p>
+          </div>
+
+          {/* Insiders List */}
+          <div>
+            <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+              <User className="text-indigo-600" size={18} /> 
+              Talk to Insiders ({institutionInsiders.length})
+            </h3>
+            
+            <div className="space-y-3">
+              {institutionInsiders.map(person => (
+                <div key={person.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 items-start">
+                  <div className="w-12 h-12 bg-gray-100 rounded-full shrink-0 overflow-hidden border-2 border-white shadow-sm">
+                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${person.name}`} alt={person.name} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-gray-900 flex items-center gap-1">
+                          {person.name} 
+                          {person.verified && <CheckCircle size={14} className="text-blue-500 fill-current" />}
+                        </h4>
+                        <p className="text-xs text-gray-500 mb-1">{person.designation}</p>
+                      </div>
+                      <Badge role={person.role} />
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {person.talksAbout.map(tag => (
+                        <span key={tag} className="text-[10px] bg-gray-50 text-gray-500 px-2 py-0.5 rounded-md border border-gray-200">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2 mt-4">
+                      <button 
+                        onClick={() => startChat(person)}
+                        className="flex-1 bg-indigo-600 text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors"
+                      >
+                        <MessageCircle size={14} /> Chat Now
+                      </button>
+                      <button className="flex-1 bg-white border border-gray-200 text-gray-700 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-gray-50">
+                        <Mail size={14} /> Email
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. CHAT VIEW
+  if (view === 'chat') {
+    return (
+      <div className="min-h-screen bg-gray-100 flex flex-col font-sans">
+        {/* Chat Header */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 flex items-center gap-3 shadow-sm">
+          <button onClick={() => setView('institution')} className="p-2 hover:bg-gray-100 rounded-full">
+            <ChevronLeft size={20} />
+          </button>
+          <div className="w-10 h-10 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+             <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedInsider.name}`} alt={selectedInsider.name} />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-sm leading-tight">{selectedInsider.name}</h3>
+            <p className="text-xs text-green-600 flex items-center gap-1">
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span> Online
+            </p>
+          </div>
+          <button className="p-2 text-gray-400 hover:text-indigo-600">
+            <Phone size={20} />
+          </button>
+        </div>
+
+        {/* Chat Messages */}
+        <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+          {/* Disclaimer */}
+          <div className="flex justify-center">
+            <span className="bg-yellow-50 text-yellow-800 text-[10px] px-3 py-1 rounded-full border border-yellow-100">
+              This is a verified {selectedInsider.role}. Be respectful.
+            </span>
+          </div>
+
+          {chatHistory.map((msg, idx) => (
+            <div key={idx} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm ${msg.sender === 'me' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-200'}`}>
+                {msg.text}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Chat Input */}
+        <div className="bg-white p-3 border-t border-gray-200">
+          <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
+            <input 
+              type="text" 
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+              placeholder="Ask about hostels, faculty..."
+              className="flex-1 bg-transparent outline-none text-sm"
+            />
+            <button 
+              onClick={sendMessage}
+              className={`p-2 rounded-full transition-all ${chatInput.trim() ? 'bg-indigo-600 text-white' : 'text-gray-400'}`}
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
