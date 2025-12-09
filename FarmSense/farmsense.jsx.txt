@@ -1,0 +1,366 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Upload, Droplet, Sprout, Activity, ArrowRight, RefreshCw, AlertCircle, CheckCircle2, Leaf, ThermometerSun } from 'lucide-react';
+
+const SoilAnalysisApp = () => {
+  const [file, setFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [analysisStep, setAnalysisStep] = useState('');
+  const [result, setResult] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  // Fake database of soil results
+  const soilTypes = [
+    {
+      type: "Loamy Soil",
+      color: "bg-amber-100 text-amber-900",
+      description: "The ideal garden soil. Crumbly, dark, and holds moisture well while draining easily.",
+      moisture: "Balanced (45-50%)",
+      ph: "6.5 (Slightly Acidic)",
+      plants: ["Tomatoes", "Peppers", "Roses", "Carrots", "Spinach", "Most garden vegetables"],
+      tips: [
+        "Maintain organic matter by adding compost yearly.",
+        "Mulch to retain moisture during hot spells.",
+        "Perfect for raised beds."
+      ]
+    },
+    {
+      type: "Clay Soil",
+      color: "bg-orange-100 text-orange-900",
+      description: "Heavy and sticky when wet, rock hard when dry. Nutrient rich but poor drainage.",
+      moisture: "High Retention (70%+)",
+      ph: "7.2 (Neutral to Alkaline)",
+      plants: ["Broccoli", "Cabbage", "Aster", "Daylilies", "Hydrangeas", "Fruit trees"],
+      tips: [
+        "Add gypsum and coarse sand to improve drainage.",
+        "Avoid working the soil when it's wet to prevent compaction.",
+        "Incorporate plenty of organic compost to lighten the texture."
+      ]
+    },
+    {
+      type: "Sandy Soil",
+      color: "bg-yellow-50 text-yellow-900",
+      description: "Gritty and loose. Drains very quickly and warms up fast in spring, but low in nutrients.",
+      moisture: "Low (< 20%)",
+      ph: "5.8 (Acidic)",
+      plants: ["Lavender", "Carrots", "Potatoes", "Succulents", "Strawberries", "Zucchini"],
+      tips: [
+        "Add organic matter like peat moss or coconut coir to improve water retention.",
+        "Use slow-release fertilizers as nutrients wash away easily.",
+        "Mulch heavily to stop evaporation."
+      ]
+    },
+    {
+      type: "Silty Soil",
+      color: "bg-stone-100 text-stone-900",
+      description: "Soft and soapy to the touch. Retains moisture well and is very fertile.",
+      moisture: "High (60-65%)",
+      ph: "6.8 (Neutral)",
+      plants: ["Willow trees", "Dogwood", "Birch", "Hostas", "Ferns", "Lettuce"],
+      tips: [
+        "Avoid compacting the soil by walking on it too much.",
+        "Mix in organic matter to improve structure.",
+        "Turn over the topsoil annually to aerate."
+      ]
+    }
+  ];
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleChange = (e) => {
+    e.preventDefault();
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  const handleFile = (file) => {
+    setFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result);
+      startAnalysis();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const startAnalysis = () => {
+    setIsAnalyzing(true);
+    setProgress(0);
+    setResult(null);
+
+    const steps = [
+      { msg: "Scanning grain texture...", time: 1000, prog: 25 },
+      { msg: "Measuring moisture content...", time: 2500, prog: 50 },
+      { msg: "Calculating pH levels...", time: 4000, prog: 75 },
+      { msg: "Identifying mineral composition...", time: 5500, prog: 90 },
+      { msg: "Finalizing recommendation engine...", time: 6500, prog: 100 }
+    ];
+
+    let currentStep = 0;
+
+    const runStep = () => {
+      if (currentStep < steps.length) {
+        setAnalysisStep(steps[currentStep].msg);
+        setProgress(steps[currentStep].prog);
+        setTimeout(() => {
+          currentStep++;
+          if (currentStep === steps.length) {
+            finishAnalysis();
+          } else {
+            runStep();
+          }
+        }, 1500); // Wait time between steps
+      }
+    };
+
+    runStep();
+  };
+
+  const finishAnalysis = () => {
+    // Pick a random result to simulate AI decision making
+    const randomResult = soilTypes[Math.floor(Math.random() * soilTypes.length)];
+    setResult(randomResult);
+    setIsAnalyzing(false);
+  };
+
+  const resetApp = () => {
+    setFile(null);
+    setImagePreview(null);
+    setResult(null);
+    setProgress(0);
+  };
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-stone-800 font-sans selection:bg-green-200">
+      
+      {/* Header */}
+      <header className="bg-white border-b border-stone-200 sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-green-600 text-white p-2 rounded-lg">
+              <Sprout size={24} />
+            </div>
+            <h1 className="text-xl font-bold text-stone-900 tracking-tight">SoilSense AI</h1>
+          </div>
+          <div className="text-xs font-medium text-stone-500 bg-stone-100 px-3 py-1 rounded-full">
+            v2.4.0 Beta
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        
+        {!imagePreview ? (
+          /* Upload State */
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-8 md:p-12 text-center">
+              <div className="max-w-md mx-auto">
+                <div className="bg-green-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Upload className="text-green-600" size={32} />
+                </div>
+                <h2 className="text-2xl font-bold mb-3 text-stone-900">Analyze Your Soil</h2>
+                <p className="text-stone-600 mb-8 leading-relaxed">
+                  Upload a photo of your garden soil to get an instant analysis of its composition, pH, and planting recommendations.
+                </p>
+
+                {/* Instructions Card */}
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8 text-left flex items-start gap-3">
+                  <AlertCircle className="text-blue-600 shrink-0 mt-0.5" size={20} />
+                  <div>
+                    <h3 className="font-semibold text-blue-900 text-sm mb-1">For Accurate Results</h3>
+                    <p className="text-blue-800 text-sm">
+                      Please dig <strong>10-15cm (4-6 inches)</strong> deep before taking the photo. Surface soil is often dry and doesn't represent the true growing conditions.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Drop Zone */}
+                <div 
+                  className={`relative border-2 border-dashed rounded-xl p-8 transition-all duration-200 ${
+                    dragActive 
+                      ? "border-green-500 bg-green-50" 
+                      : "border-stone-300 hover:border-green-400 hover:bg-stone-50"
+                  }`}
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                >
+                  <input 
+                    type="file" 
+                    id="soil-upload" 
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    accept="image/*"
+                    onChange={handleChange}
+                  />
+                  <div className="pointer-events-none">
+                    <p className="font-medium text-stone-700">Drag and drop your image here</p>
+                    <p className="text-sm text-stone-500 mt-1">or click to browse files</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Analysis & Results State */
+          <div className="grid md:grid-cols-2 gap-8 animate-in fade-in zoom-in-95 duration-500">
+            
+            {/* Left Column: Image & Status */}
+            <div className="space-y-6">
+              <div className="bg-white p-2 rounded-2xl shadow-sm border border-stone-200 relative overflow-hidden">
+                <img 
+                  src={imagePreview} 
+                  alt="Uploaded Soil" 
+                  className={`w-full h-64 md:h-80 object-cover rounded-xl transition-all duration-1000 ${isAnalyzing ? 'scale-105 filter blur-sm' : ''}`}
+                />
+                
+                {/* Scanning Overlay Effect */}
+                {isAnalyzing && (
+                  <div className="absolute inset-0 z-10">
+                    <div className="w-full h-1 bg-green-400/80 shadow-[0_0_15px_rgba(74,222,128,0.8)] absolute animate-[scan_2s_ease-in-out_infinite]"></div>
+                    <div className="absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur-md text-white px-4 py-3 rounded-xl">
+                      <div className="flex justify-between text-xs font-mono mb-2 uppercase tracking-widest text-green-400">
+                        <span>Status: Processing</span>
+                        <span>{progress}%</span>
+                      </div>
+                      <div className="w-full bg-stone-700 rounded-full h-1.5 mb-2">
+                        <div 
+                          className="bg-green-500 h-1.5 rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-sm font-medium text-stone-200 animate-pulse">{analysisStep}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Success Overlay */}
+                {!isAnalyzing && result && (
+                  <div className="absolute top-4 right-4 bg-green-500 text-white p-2 rounded-full shadow-lg animate-in zoom-in spin-in-12">
+                    <CheckCircle2 size={24} />
+                  </div>
+                )}
+              </div>
+
+              {!isAnalyzing && (
+                <button 
+                  onClick={resetApp}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-white hover:bg-stone-50 border border-stone-200 text-stone-600 font-medium rounded-xl transition-colors"
+                >
+                  <RefreshCw size={18} />
+                  Analyze Another Sample
+                </button>
+              )}
+            </div>
+
+            {/* Right Column: Results */}
+            <div className="space-y-6">
+              {isAnalyzing ? (
+                /* Skeleton Loader */
+                <div className="space-y-4 opacity-50">
+                  <div className="h-32 bg-stone-200 rounded-2xl animate-pulse"></div>
+                  <div className="h-20 bg-stone-200 rounded-2xl animate-pulse"></div>
+                  <div className="h-48 bg-stone-200 rounded-2xl animate-pulse"></div>
+                </div>
+              ) : result ? (
+                /* Actual Results */
+                <div className="space-y-6 animate-in slide-in-from-right-8 duration-500">
+                  
+                  {/* Main Result Card */}
+                  <div className={`${result.color} p-6 rounded-2xl shadow-sm border border-stone-100`}>
+                    <div className="flex items-center gap-2 mb-2 opacity-80">
+                      <Activity size={18} />
+                      <span className="text-xs font-bold tracking-wider uppercase">Detected Type</span>
+                    </div>
+                    <h2 className="text-3xl font-bold mb-2">{result.type}</h2>
+                    <p className="leading-relaxed opacity-90">{result.description}</p>
+                  </div>
+
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+                      <div className="flex items-center gap-2 text-blue-600 mb-2">
+                        <Droplet size={20} />
+                        <span className="font-semibold text-sm">Moisture</span>
+                      </div>
+                      <p className="text-lg font-bold text-stone-800">{result.moisture}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+                      <div className="flex items-center gap-2 text-purple-600 mb-2">
+                        <ThermometerSun size={20} />
+                        <span className="font-semibold text-sm">pH Level</span>
+                      </div>
+                      <p className="text-lg font-bold text-stone-800">{result.ph}</p>
+                    </div>
+                  </div>
+
+                  {/* Plants Recommendation */}
+                  <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4 text-green-700">
+                      <Leaf size={20} />
+                      <h3 className="font-bold">What to Plant</h3>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {result.plants.map((plant, idx) => (
+                        <span key={idx} className="bg-green-50 text-green-800 px-3 py-1 rounded-lg text-sm font-medium border border-green-100">
+                          {plant}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tips Section */}
+                  <div className="bg-stone-800 text-stone-100 p-6 rounded-2xl shadow-lg">
+                    <h3 className="font-bold mb-4 flex items-center gap-2">
+                      <Sprout size={20} className="text-green-400" />
+                      Improvement Tips
+                    </h3>
+                    <ul className="space-y-3">
+                      {result.tips.map((tip, idx) => (
+                        <li key={idx} className="flex items-start gap-3 text-sm text-stone-300">
+                          <ArrowRight size={16} className="mt-0.5 text-green-400 shrink-0" />
+                          {tip}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </main>
+
+      <style>{`
+        @keyframes scan {
+          0% { top: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default SoilAnalysisApp;
