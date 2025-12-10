@@ -1,0 +1,2 @@
+This is a part of my discipline challenge and the proof of my progress. This MVP is called Vivid Stitch.
+This app allows users to create their own fashion with their style, colours, patterns and more importantly their own brand logo
