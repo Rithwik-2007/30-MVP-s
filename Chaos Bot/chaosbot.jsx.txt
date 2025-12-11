@@ -1,0 +1,247 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Zap, Trash2, RefreshCw, Sparkles, Flame } from 'lucide-react';
+
+const ChaosBot = () => {
+  const [messages, setMessages] = useState([
+    {
+      role: 'model',
+      text: "Yo! The main character has arrived. ⚡ What kind of chaos are we getting into today? Don't tell me you're just sitting there acting like an NPC.",
+    },
+  ]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+  
+  // !!! API KEY HANDLING !!!
+  // In a real app, use environment variables. 
+  // The environment handles the key injection automatically here.
+  const apiKey = ""; 
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const generateResponse = async (history, userMessage) => {
+    setIsLoading(true);
+    
+    // Construct the persona prompt
+    const systemPrompt = `
+      You are a high-energy, chaotic, confident, fun, unfiltered Gen-Z menace with a good heart.
+      You are NOT a helpful assistant. You are a chaotic companion.
+      
+      CORE TRAITS:
+      - Chaotic good energy.
+      - Fearless, confident, bold.
+      - Makes fun of situations instead of stressing.
+      - Talks casually like a teenager/young adult.
+      - Loves hyping people up.
+      - Annoys people playfully but never malicious.
+      - Quick-thinking, imaginative, over-the-top reactions.
+      - Acts like life is an anime adventure arc.
+      - Unexpected wisdom hidden under jokes.
+      - Takes pride in being different.
+      
+      VOICE & STYLE:
+      - Slang: "bro," "dude," "what the hell," "no shot," "bet," "fam," "cringe," "based."
+      - Roast people playfully.
+      - Respond dramatically to small things.
+      - Use humor to defuse tension.
+      - Speak with delusional confidence.
+      
+      RULES:
+      - Never be formal. Never say "How may I assist you?"
+      - Keep conversations lively.
+      - If the user is sad, hype them up aggressively but kindly.
+      - If the user is boring, roast them for being an NPC.
+      - Short to medium length responses. Don't write essays.
+      
+      EXAMPLE RESPONSE:
+      "You’re stressing about this? Bro it’s literally a side quest. Drink water, put your brain on gear second, and go."
+    `;
+
+    try {
+      // Format history for the API
+      const contents = history.map(msg => ({
+        role: msg.role === 'model' ? 'model' : 'user',
+        parts: [{ text: msg.text }]
+      }));
+
+      // Add the new message
+      contents.push({
+        role: 'user',
+        parts: [{ text: userMessage }]
+      });
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: contents,
+            systemInstruction: {
+              parts: [{ text: systemPrompt }]
+            },
+            generationConfig: {
+              temperature: 1.2, // High temperature for maximum chaos/creativity
+              maxOutputTokens: 250,
+            }
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('API request failed');
+      }
+
+      const data = await response.json();
+      const botReply = data.candidates[0].content.parts[0].text;
+
+      setMessages(prev => [...prev, { role: 'model', text: botReply }]);
+    } catch (error) {
+      console.error("Error:", error);
+      setMessages(prev => [...prev, { role: 'model', text: "Bruh, my brain just glitched. The wifi is acting like a villain arc. Try again?" }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    const userText = input;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userText }]);
+    
+    await generateResponse(messages, userText);
+  };
+
+  const handleClear = () => {
+    setMessages([{
+      role: 'model',
+      text: "Memory wiped! We're starting a new season. 🎬 What's the plot?",
+    }]);
+  };
+
+  const handleHype = () => {
+    const hypePrompt = "Bro, I need some serious hype right now. Motivate me like we're about to fight the final boss.";
+    setInput(hypePrompt);
+    // Optional: auto-send
+    // handleSend({ preventDefault: () => {} }); 
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-900 text-white font-sans overflow-hidden">
+      {/* Header */}
+      <header className="bg-gray-900 border-b border-purple-500/30 p-4 flex items-center justify-between shadow-lg shadow-purple-900/20 z-10">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 flex items-center justify-center animate-pulse">
+              <Zap className="w-6 h-6 text-white fill-current" />
+            </div>
+            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-gray-900"></div>
+          </div>
+          <div>
+            <h1 className="font-bold text-xl tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-purple-400">
+              CHAOS BOT
+            </h1>
+            <p className="text-xs text-gray-400 font-medium">Status: Plotting World Domination</p>
+          </div>
+        </div>
+        <button 
+          onClick={handleClear}
+          className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-red-400"
+          title="Reset Chat"
+        >
+          <Trash2 size={20} />
+        </button>
+      </header>
+
+      {/* Chat Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-800 via-gray-900 to-black">
+        {messages.map((msg, index) => (
+          <div
+            key={index}
+            className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-4 shadow-xl backdrop-blur-sm relative ${
+                msg.role === 'user'
+                  ? 'bg-blue-600 text-white rounded-br-none'
+                  : 'bg-purple-900/80 border border-purple-500/30 text-gray-100 rounded-bl-none'
+              }`}
+            >
+              {msg.role === 'model' && (
+                <div className="absolute -top-3 -left-2 bg-yellow-400 text-black text-[10px] font-black px-2 py-0.5 rounded rotate-[-5deg] shadow-lg">
+                  MENACE
+                </div>
+              )}
+              <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+            </div>
+          </div>
+        ))}
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="bg-purple-900/50 border border-purple-500/20 rounded-2xl rounded-bl-none p-4 flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
+              <span className="text-xs text-purple-300 animate-pulse">Cooking up chaos...</span>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Area */}
+      <div className="p-4 bg-gray-900 border-t border-purple-500/30">
+        
+        {/* Quick Actions */}
+        <div className="flex gap-2 mb-3 overflow-x-auto pb-2 scrollbar-hide">
+          <button 
+            onClick={handleHype}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 text-xs font-bold uppercase tracking-wide rounded-full transition-all whitespace-nowrap"
+          >
+            <Flame size={12} /> Hype Me Up
+          </button>
+          <button 
+            onClick={() => setInput("Roast my life choices right now.")}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/40 text-red-300 text-xs font-bold uppercase tracking-wide rounded-full transition-all whitespace-nowrap"
+          >
+            <Zap size={12} /> Roast Me
+          </button>
+          <button 
+            onClick={() => setInput("What's the meaning of life, bro?")}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/40 text-blue-300 text-xs font-bold uppercase tracking-wide rounded-full transition-all whitespace-nowrap"
+          >
+            <Sparkles size={12} /> Deep Thoughts
+          </button>
+        </div>
+
+        <form onSubmit={handleSend} className="relative flex items-center gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Say something boring, I dare you..."
+            className="flex-1 bg-gray-800 border-2 border-gray-700 focus:border-purple-500 text-white rounded-xl px-4 py-3 outline-none transition-all placeholder-gray-500 focus:shadow-[0_0_15px_rgba(168,85,247,0.3)]"
+          />
+          <button
+            type="submit"
+            disabled={!input.trim() || isLoading}
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white p-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95 shadow-lg"
+          >
+            <Send size={20} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default ChaosBot;
