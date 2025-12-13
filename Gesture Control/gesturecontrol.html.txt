@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Controlled 3D Interface v4 (Collision)</title>
+    <!-- Tailwind CSS for UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- MediaPipe Hands & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #0f172a; font-family: 'Segoe UI', sans-serif; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; transition: transform 0.1s; }
+        
+        /* Camera Preview */
+        .camera-preview {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 240px;
+            height: 180px;
+            border-radius: 12px;
+            overflow: hidden;
+            z-index: 10;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.5);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease;
+        }
+        
+        .camera-preview:hover { transform: scale(1.05); border-color: #3b82f6; }
+
+        .camera-preview video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        .camera-preview canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+
+        /* Loading Overlay */
+        #loader {
+            position: absolute;
+            inset: 0;
+            background: #0f172a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            transition: opacity 0.5s ease;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #1e293b;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            color: white;
+            pointer-events: none;
+            width: 300px;
+        }
+
+        .hand-status {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .hand-status h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 4px;
+        }
+
+        .mode-tag {
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .active-l { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        .active-r { border-color: #a855f7; background: rgba(168, 85, 247, 0.1); }
+
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="hud">
+        <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-500 mb-6">
+            Dual Core v4
+        </h1>
+        
+        <div id="status-left" class="hand-status">
+            <h3 class="text-blue-300">Left Hand</h3>
+            <div class="mode-tag text-white" id="mode-text-left">Searching...</div>
+        </div>
+
+        <div id="status-right" class="hand-status">
+            <h3 class="text-purple-300">Right Hand</h3>
+            <div class="mode-tag text-white" id="mode-text-right">Searching...</div>
+        </div>
+
+        <div class="mt-4 text-xs text-gray-500 font-mono">
+            <div>✊ Fist: Move (Smash to Collide!)</div>
+            <div>👌 Pinch: Scale</div>
+            <div>✌️ Peace: Color</div>
+            <div>✋ Palm: Rotate</div>
+        </div>
+    </div>
+
+    <div class="camera-preview">
+        <video id="input_video" playsinline></video>
+        <canvas id="output_canvas"></canvas>
+    </div>
+
+    <div id="loader">
+        <div class="spinner mb-4"></div>
+        <div class="text-blue-400 font-mono animate-pulse">Initializing Dual Hand Tracking...</div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            cameraWidth: 320,
+            cameraHeight: 240,
+            lerpFactor: 0.08,
+            pinchThreshold: 0.05
+        };
+
+        // --- State Management for TWO hands ---
+        class HandState {
+            constructor(defaultX, colorIdx) {
+                this.rotationX = 0;
+                this.rotationY = 0;
+                this.positionX = defaultX;
+                this.positionY = 0;
+                this.scale = 1.2;
+                this.mode = 'IDLE';
+                this.colorIndex = colorIdx;
+                this.lastColorChange = 0;
+                this.detected = false;
+                this.defaultX = defaultX;
+                // Collision recoil
+                this.recoilX = 0;
+                this.recoilY = 0;
+            }
+        }
+
+        const state = {
+            Left: new HandState(-3, 0),  
+            Right: new HandState(3, 2),
+            collisionCooldown: 0,
+            shakeIntensity: 0
+        };
+
+        // --- Materials (Elements) ---
+        const materials = [
+            // Aether (White/Blue)
+            { color: 0xffffff, emissive: 0x1e3a8a, core: 0x60a5fa },
+            // Fire (Red/Orange)
+            { color: 0xff5555, emissive: 0x7f1d1d, core: 0xfca5a5 },
+            // Nature (Green)
+            { color: 0x4ade80, emissive: 0x064e3b, core: 0x86efac },
+            // Void (Purple)
+            { color: 0xc084fc, emissive: 0x581c87, core: 0xd8b4fe },
+            // Gold
+            { color: 0xfacc15, emissive: 0x854d0e, core: 0xfef08a }
+        ];
+
+        // --- Three.js Setup ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x0f172a, 0.035);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 8; 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0x404040, 2);
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0x3b82f6, 2, 50);
+        pointLight.position.set(0, 10, 10);
+        scene.add(pointLight);
+
+        // --- Shockwave Effect ---
+        const shockwaveGeometry = new THREE.SphereGeometry(1, 32, 32);
+        const shockwaveMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xffffff, 
+            transparent: true, 
+            opacity: 0, 
+            wireframe: true 
+        });
+        const shockwave = new THREE.Mesh(shockwaveGeometry, shockwaveMaterial);
+        shockwave.visible = false;
+        scene.add(shockwave);
+
+        // --- Object Factory ---
+        function createCrystal(initialMatIndex, xPos) {
+            const group = new THREE.Group();
+            group.position.x = xPos;
+            
+            const matConfig = materials[initialMatIndex];
+
+            const geometry = new THREE.IcosahedronGeometry(1, 1);
+            const material = new THREE.MeshStandardMaterial({ 
+                color: matConfig.color,
+                roughness: 0.1,
+                metalness: 0.9,
+                wireframe: true,
+                emissive: matConfig.emissive,
+                emissiveIntensity: 0.5
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            group.add(mesh);
+
+            const coreGeometry = new THREE.IcosahedronGeometry(0.5, 0);
+            const coreMaterial = new THREE.MeshBasicMaterial({ color: matConfig.core, wireframe: false });
+            const core = new THREE.Mesh(coreGeometry, coreMaterial);
+            mesh.add(core);
+
+            // Add to scene
+            scene.add(group);
+
+            return { group, mesh, core, material, coreMaterial };
+        }
+
+        const leftObj = createCrystal(0, -3);
+        const rightObj = createCrystal(3, 3); 
+
+        const objects = {
+            Left: leftObj,
+            Right: rightObj
+        };
+
+        // Background Particles
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 1000;
+        const posArray = new Float32Array(particlesCount * 3);
+        for(let i = 0; i < particlesCount * 3; i++) posArray[i] = (Math.random() - 0.5) * 30;
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({ size: 0.03, color: 0x64748b, transparent: true, opacity: 0.6 });
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        // --- Logic Helper Functions ---
+        function isFingerExtended(landmarks, tipIdx, pipIdx) {
+            return landmarks[tipIdx].y < landmarks[pipIdx].y;
+        }
+
+        function getDistance(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        function updateObjectMaterial(handLabel, colorIndex) {
+            const obj = objects[handLabel];
+            const mat = materials[colorIndex % materials.length];
+            
+            obj.material.color.setHex(mat.color);
+            obj.material.emissive.setHex(mat.emissive);
+            obj.coreMaterial.color.setHex(mat.core);
+        }
+
+        // --- MediaPipe Processing ---
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const loader = document.getElementById('loader');
+
+        const statusEls = {
+            Left: { box: document.getElementById('status-left'), text: document.getElementById('mode-text-left') },
+            Right: { box: document.getElementById('status-right'), text: document.getElementById('mode-text-right') }
+        };
+
+        function onResults(results) {
+            if (loader.style.opacity !== '0') {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 500);
+            }
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            state.Left.detected = false;
+            state.Right.detected = false;
+
+            if (results.multiHandLandmarks) {
+                for (const [index, landmarks] of results.multiHandLandmarks.entries()) {
+                    const classification = results.multiHandedness[index];
+                    const label = classification.label;
+                    const handState = state[label];
+                    handState.detected = true;
+
+                    const color = label === 'Left' ? '#3b82f6' : '#a855f7';
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: color, lineWidth: 2});
+                    drawLandmarks(canvasCtx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 3});
+
+                    const indexExt = isFingerExtended(landmarks, 8, 6);
+                    const middleExt = isFingerExtended(landmarks, 12, 10);
+                    const ringExt = isFingerExtended(landmarks, 16, 14);
+                    const pinkyExt = isFingerExtended(landmarks, 20, 18);
+                    const thumbOpen = getDistance(landmarks[4], landmarks[17]) > 0.15;
+                    const pinchDist = getDistance(landmarks[4], landmarks[8]);
+
+                    // GESTURES
+                    if (!indexExt && !middleExt && !ringExt && pinkyExt && thumbOpen) {
+                        handState.mode = 'RESET';
+                        handState.rotationX = 0;
+                        handState.rotationY = 0;
+                        handState.positionX = handState.defaultX;
+                        handState.positionY = 0;
+                        handState.scale = 1.2;
+                        handState.colorIndex = label === 'Left' ? 0 : 2;
+                        updateObjectMaterial(label, handState.colorIndex);
+                    }
+                    else if (indexExt && middleExt && !ringExt && !pinkyExt) {
+                        handState.mode = 'COLOR';
+                        const now = Date.now();
+                        if (now - handState.lastColorChange > 1000) {
+                            handState.colorIndex++;
+                            updateObjectMaterial(label, handState.colorIndex);
+                            handState.lastColorChange = now;
+                            handState.scale = 1.5;
+                            setTimeout(() => handState.scale = 1.2, 200);
+                        }
+                    }
+                    else if (pinchDist < CONFIG.pinchThreshold) {
+                        handState.mode = 'SCALE';
+                        handState.scale = 0.6;
+                    }
+                    else if (!indexExt && !middleExt && !ringExt && !pinkyExt) {
+                        handState.mode = 'MOVE';
+                        const x = landmarks[0].x;
+                        const y = landmarks[0].y;
+                        handState.positionX = -(x - 0.5) * 12;
+                        handState.positionY = -(y - 0.5) * 8;
+                    }
+                    else {
+                        handState.mode = 'ROTATE';
+                        const x = landmarks[9].x; 
+                        const y = landmarks[9].y;
+                        handState.rotationY = (x - 0.5) * Math.PI * 3; 
+                        handState.rotationX = (y - 0.5) * Math.PI * 2;
+                        handState.scale = 1.2;
+                    }
+                }
+            }
+
+            ['Left', 'Right'].forEach(hand => {
+                const s = state[hand];
+                const ui = statusEls[hand];
+                if (s.detected) {
+                    ui.box.classList.add(hand === 'Left' ? 'active-l' : 'active-r');
+                    ui.box.style.opacity = '1';
+                    ui.text.innerText = s.mode;
+                } else {
+                    ui.box.classList.remove('active-l', 'active-r');
+                    ui.box.style.opacity = '0.5';
+                    ui.text.innerText = "Searching...";
+                    s.rotationY += 0.005;
+                    s.positionX += (s.defaultX - s.positionX) * 0.01;
+                    s.positionY += (0 - s.positionY) * 0.01;
+                }
+            });
+
+            canvasCtx.restore();
+        }
+
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
+        hands.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 320, height: 240
+        });
+        cameraUtils.start();
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 1. COLLISION DETECTION
+            const posL = objects.Left.group.position;
+            const posR = objects.Right.group.position;
+            const dist = posL.distanceTo(posR);
+            const collisionThreshold = 2.2; 
+
+            if (dist < collisionThreshold && state.collisionCooldown === 0) {
+                // TRIGGER COLLISION
+                state.collisionCooldown = 50; 
+                state.shakeIntensity = 20; // Start shaking
+
+                // Shockwave
+                shockwave.position.copy(posL).lerp(posR, 0.5); // Midpoint
+                shockwave.scale.set(0.1, 0.1, 0.1);
+                shockwave.visible = true;
+                shockwave.material.opacity = 1;
+                shockwave.rotation.z = Math.random() * Math.PI;
+
+                // Flash
+                objects.Left.mesh.material.emissiveIntensity = 4;
+                objects.Right.mesh.material.emissiveIntensity = 4;
+
+                // Physics Recoil (Push apart)
+                state.Left.recoilX = -3;
+                state.Right.recoilX = 3;
+            }
+
+            // 2. ANIMATE SHOCKWAVE
+            if (shockwave.visible) {
+                shockwave.scale.multiplyScalar(1.15);
+                shockwave.material.opacity *= 0.9;
+                if (shockwave.material.opacity < 0.01) {
+                    shockwave.visible = false;
+                }
+            }
+
+            // 3. COOLDOWN & RESTORE
+            if (state.collisionCooldown > 0) {
+                state.collisionCooldown--;
+                // Restore intensity
+                const currentInt = objects.Left.mesh.material.emissiveIntensity;
+                const newInt = THREE.MathUtils.lerp(currentInt, 0.5, 0.1);
+                objects.Left.mesh.material.emissiveIntensity = newInt;
+                objects.Right.mesh.material.emissiveIntensity = newInt;
+            }
+
+            // 4. SCREEN SHAKE
+            if (state.shakeIntensity > 0) {
+                const shakeX = (Math.random() - 0.5) * state.shakeIntensity;
+                const shakeY = (Math.random() - 0.5) * state.shakeIntensity;
+                container.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
+                state.shakeIntensity *= 0.9; // Decay
+                if (state.shakeIntensity < 0.5) {
+                    state.shakeIntensity = 0;
+                    container.style.transform = 'translate(0px, 0px)';
+                }
+            }
+
+            // 5. UPDATE OBJECTS
+            ['Left', 'Right'].forEach(hand => {
+                const s = state[hand];
+                const obj = objects[hand];
+
+                // Lerp Rotation
+                obj.mesh.rotation.x += (s.rotationX - obj.mesh.rotation.x) * CONFIG.lerpFactor;
+                obj.mesh.rotation.y += (s.rotationY - obj.mesh.rotation.y) * CONFIG.lerpFactor;
+                
+                // Lerp Position + Recoil
+                let targetX = s.positionX + s.recoilX;
+                let targetY = s.positionY + s.recoilY;
+                
+                // Decay recoil
+                s.recoilX *= 0.8;
+                s.recoilY *= 0.8;
+
+                obj.group.position.x += (targetX - obj.group.position.x) * CONFIG.lerpFactor;
+                obj.group.position.y += (targetY - obj.group.position.y) * CONFIG.lerpFactor;
+
+                // Lerp Scale
+                const currentScale = obj.mesh.scale.x;
+                const newScale = currentScale + (s.scale - currentScale) * CONFIG.lerpFactor;
+                obj.mesh.scale.set(newScale, newScale, newScale);
+
+                // Core Rotation
+                obj.core.rotation.z -= 0.02;
+                obj.core.rotation.x -= 0.01;
+            });
+
+            particlesMesh.rotation.y += 0.0005;
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        canvasElement.width = 320;
+        canvasElement.height = 240;
+
+        animate();
+
+    </script>
+</body>
+</html>
