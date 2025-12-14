@@ -1,0 +1,374 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, Move, Plus, Trash2, Info, Lightbulb, RotateCw, Check, Maximize2 } from 'lucide-react';
+
+// --- Constants & Helper Data ---
+
+const FURNITURE_TYPES = [
+  { label: 'Bed', color: 'bg-blue-500/80', w: 20, h: 25 },
+  { label: 'Desk', color: 'bg-emerald-500/80', w: 15, h: 10 },
+  { label: 'Chair', color: 'bg-yellow-500/80', w: 8, h: 8 },
+  { label: 'Sofa', color: 'bg-indigo-500/80', w: 25, h: 12 },
+  { label: 'Table', color: 'bg-amber-600/80', w: 15, h: 15 },
+  { label: 'Rug', color: 'bg-rose-400/50', w: 30, h: 20 },
+  { label: 'Plant', color: 'bg-green-600/80', w: 6, h: 6 },
+  { label: 'Custom', color: 'bg-gray-500/80', w: 10, h: 10 },
+];
+
+const SUGGESTIONS = [
+  "Try moving the bed away from the door to improve flow.",
+  "Place the desk perpendicular to the window to reduce glare.",
+  "Clear the center area to create walking space.",
+  "Ensure there is at least 3 feet of walking path between major furniture.",
+  "Floating furniture (away from walls) can make a room feel larger.",
+  "Consider the 'command position' for your desk - facing the door.",
+  "Rugs should anchor the furniture, sitting partially under the sofa.",
+];
+
+// --- Main Application Component ---
+
+export default function SpaceShift() {
+  const [image, setImage] = useState(null);
+  const [objects, setObjects] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [advice, setAdvice] = useState(SUGGESTIONS[0]);
+  
+  // Ref for the container to calculate percentages
+  const containerRef = useRef(null);
+
+  // Dragging/Resizing State
+  const [dragState, setDragState] = useState({
+    isDragging: false,
+    isResizing: false,
+    targetId: null,
+    startX: 0,
+    startY: 0,
+    startLeft: 0,
+    startTop: 0,
+    startWidth: 0,
+    startHeight: 0,
+  });
+
+  // --- Image Upload Handler ---
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImage(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // --- Object Management ---
+  const addObject = (type) => {
+    const newObj = {
+      id: Date.now(),
+      label: type.label,
+      color: type.color,
+      // Default position (center-ish)
+      x: 40 + (Math.random() * 10), 
+      y: 40 + (Math.random() * 10),
+      w: type.w,
+      h: type.h,
+      rotation: 0
+    };
+    setObjects([...objects, newObj]);
+    setSelectedId(newObj.id);
+    
+    // Rotate advice
+    setAdvice(SUGGESTIONS[Math.floor(Math.random() * SUGGESTIONS.length)]);
+  };
+
+  const deleteObject = (id) => {
+    setObjects(objects.filter(obj => obj.id !== id));
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  const rotateObject = (id) => {
+    setObjects(objects.map(obj => {
+      if (obj.id === id) {
+        // Swap width and height visually by rotating 90 degrees logic or just swapping dimensions?
+        // Let's swap dimensions for simpler bounding box logic in this MVP
+        return { ...obj, w: obj.h, h: obj.w };
+      }
+      return obj;
+    }));
+  };
+
+  // --- Interaction Handlers (Mouse/Touch) ---
+
+  const handlePointerDown = (e, id, type) => {
+    e.stopPropagation(); // Prevent deselecting when clicking an object
+    e.preventDefault(); // Prevent scrolling on touch
+
+    const obj = objects.find(o => o.id === id);
+    if (!obj || !containerRef.current) return;
+
+    setSelectedId(id);
+
+    // Get client coordinates (support touch or mouse)
+    const clientX = e.clientX || e.touches[0].clientX;
+    const clientY = e.clientY || e.touches[0].clientY;
+
+    setDragState({
+      isDragging: type === 'move',
+      isResizing: type === 'resize',
+      targetId: id,
+      startX: clientX,
+      startY: clientY,
+      startLeft: obj.x,
+      startTop: obj.y,
+      startWidth: obj.w,
+      startHeight: obj.h,
+    });
+  };
+
+  // Global Pointer Move
+  useEffect(() => {
+    const handlePointerMove = (e) => {
+      if ((!dragState.isDragging && !dragState.isResizing) || !dragState.targetId || !containerRef.current) return;
+
+      const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+      const clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+
+      const rect = containerRef.current.getBoundingClientRect();
+      
+      // Calculate delta in pixels
+      const deltaX = clientX - dragState.startX;
+      const deltaY = clientY - dragState.startY;
+
+      // Convert pixel delta to percentage
+      const deltaXPercent = (deltaX / rect.width) * 100;
+      const deltaYPercent = (deltaY / rect.height) * 100;
+
+      setObjects(prev => prev.map(obj => {
+        if (obj.id !== dragState.targetId) return obj;
+
+        if (dragState.isDragging) {
+          return {
+            ...obj,
+            x: Math.min(100 - obj.w, Math.max(0, dragState.startLeft + deltaXPercent)),
+            y: Math.min(100 - obj.h, Math.max(0, dragState.startTop + deltaYPercent)),
+          };
+        } else if (dragState.isResizing) {
+          return {
+            ...obj,
+            w: Math.max(5, dragState.startWidth + deltaXPercent),
+            h: Math.max(5, dragState.startHeight + deltaYPercent),
+          };
+        }
+        return obj;
+      }));
+    };
+
+    const handlePointerUp = () => {
+      setDragState({
+        isDragging: false,
+        isResizing: false,
+        targetId: null,
+        startX: 0, startY: 0, startLeft: 0, startTop: 0, startWidth: 0, startHeight: 0
+      });
+    };
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+    window.addEventListener('touchmove', handlePointerMove, { passive: false });
+    window.addEventListener('touchend', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('mouseup', handlePointerUp);
+      window.removeEventListener('touchmove', handlePointerMove);
+      window.removeEventListener('touchend', handlePointerUp);
+    };
+  }, [dragState]);
+
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
+      
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+        <div className="flex items-center gap-2">
+          <div className="bg-indigo-600 p-2 rounded-lg text-white">
+            <Move size={20} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold leading-none text-slate-900">SpaceShift</h1>
+            <p className="text-xs text-slate-500">Room Rearrangement MVP</p>
+          </div>
+        </div>
+        <div className="hidden sm:block text-sm text-slate-500 italic">
+          "Rearrange before you lift a finger."
+        </div>
+      </header>
+
+      <main className="flex-grow flex flex-col lg:flex-row h-[calc(100vh-80px)] overflow-hidden">
+        
+        {/* Left Sidebar: Controls */}
+        <div className="w-full lg:w-80 bg-white border-r border-slate-200 flex flex-col overflow-y-auto z-10 shadow-lg lg:shadow-none h-[35%] lg:h-full lg:flex-shrink-0">
+          
+          {/* Action 1: Upload */}
+          <div className="p-4 lg:p-6 border-b border-slate-100">
+            <h2 className="text-xs lg:text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2 lg:mb-4">1. The Room</h2>
+            <label className="flex flex-col items-center justify-center w-full h-16 lg:h-32 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-50 hover:border-indigo-400 transition-colors group">
+              <div className="flex flex-col items-center justify-center pt-2 pb-2 lg:pt-5 lg:pb-6">
+                <Upload className="w-5 h-5 lg:w-8 lg:h-8 mb-1 lg:mb-2 text-slate-400 group-hover:text-indigo-500" />
+                <p className="text-xs lg:text-sm text-slate-500 group-hover:text-slate-700">
+                  {image ? "Change Photo" : "Upload Photo"}
+                </p>
+              </div>
+              <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+            </label>
+          </div>
+
+          {/* Action 2: Add Furniture */}
+          <div className="p-4 lg:p-6 border-b border-slate-100 flex-grow overflow-y-auto">
+            <h2 className="text-xs lg:text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2 lg:mb-4">2. Furniture</h2>
+            {!image ? (
+              <div className="text-center p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <p className="text-xs lg:text-sm text-slate-500">Upload a photo first.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 lg:grid-cols-2 gap-2">
+                {FURNITURE_TYPES.map((type) => (
+                  <button
+                    key={type.label}
+                    onClick={() => addObject(type)}
+                    className="flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-1 lg:gap-2 p-2 rounded-md border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-all text-[10px] lg:text-sm font-medium"
+                  >
+                    <div className={`w-3 h-3 rounded-full ${type.color.replace('/80', '')}`}></div>
+                    <span className="truncate max-w-full">{type.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Action 3: AI Suggestions */}
+          <div className="p-6 bg-indigo-50/50 hidden lg:block">
+            <div className="flex items-center gap-2 mb-3 text-indigo-700">
+              <Lightbulb size={18} />
+              <h2 className="text-sm font-bold uppercase tracking-wider">AI Suggestion</h2>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
+              {image ? advice : "Upload a room and add furniture to get layout tips."}
+            </p>
+            {image && (
+              <button 
+                onClick={() => setAdvice(SUGGESTIONS[Math.floor(Math.random() * SUGGESTIONS.length)])}
+                className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 underline"
+              >
+                New Tip
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Right Area: Workspace Canvas */}
+        <div 
+          className="flex-grow bg-slate-100 relative flex items-center justify-center p-4 lg:p-8 overflow-hidden touch-none h-[65%] lg:h-full"
+          onClick={() => setSelectedId(null)} // Deselect on background click
+        >
+          {!image ? (
+            <div className="text-center max-w-md">
+              <div className="w-16 h-16 lg:w-20 lg:h-20 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4 lg:mb-6">
+                <Move className="text-slate-400 w-8 h-8 lg:w-10 lg:h-10" />
+              </div>
+              <h3 className="text-lg lg:text-xl font-bold text-slate-700 mb-2">No Room Loaded</h3>
+              <p className="text-sm lg:text-base text-slate-500">Upload a photo from the sidebar to begin.</p>
+            </div>
+          ) : (
+            <div 
+              ref={containerRef}
+              className="relative shadow-2xl ring-1 ring-slate-900/5 select-none"
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '100%',
+                // Use aspect ratio maintenance if needed, but object-contain on img works best naturally
+              }}
+            >
+              {/* Background Image */}
+              <img 
+                src={image} 
+                alt="Room Background" 
+                className="max-h-full max-w-full w-auto h-auto object-contain block rounded-lg pointer-events-none"
+                draggable={false}
+              />
+
+              {/* Overlay Layer */}
+              <div className="absolute inset-0 overflow-hidden rounded-lg">
+                {objects.map((obj) => (
+                  <div
+                    key={obj.id}
+                    className={`absolute flex items-center justify-center cursor-move group transition-shadow ${
+                      selectedId === obj.id 
+                        ? 'ring-2 ring-white shadow-xl z-20' 
+                        : 'hover:ring-1 hover:ring-white/50 z-10'
+                    }`}
+                    style={{
+                      left: `${obj.x}%`,
+                      top: `${obj.y}%`,
+                      width: `${obj.w}%`,
+                      height: `${obj.h}%`,
+                      backgroundColor: 'transparent', 
+                    }}
+                    onMouseDown={(e) => handlePointerDown(e, obj.id, 'move')}
+                    onTouchStart={(e) => handlePointerDown(e, obj.id, 'move')}
+                  >
+                    {/* The Visual Box */}
+                    <div 
+                      className={`w-full h-full rounded-md backdrop-blur-sm flex flex-col items-center justify-center p-1 ${obj.color} text-white shadow-sm border border-white/20`}
+                    >
+                       <span className="text-[10px] md:text-xs font-bold truncate max-w-full px-1 drop-shadow-md select-none pointer-events-none">
+                         {obj.label}
+                       </span>
+                    </div>
+
+                    {/* Controls (Only visible when selected) */}
+                    {selectedId === obj.id && (
+                      <>
+                        {/* Delete Button */}
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); deleteObject(obj.id); }}
+                          className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors z-30"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+
+                        {/* Rotate/Swap Dimensions Button */}
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); rotateObject(obj.id); }}
+                          className="absolute -top-3 -left-3 bg-indigo-500 text-white rounded-full p-1 shadow-md hover:bg-indigo-600 transition-colors z-30"
+                        >
+                          <RotateCw size={12} />
+                        </button>
+
+                        {/* Resize Handle */}
+                        <div 
+                          className="absolute -bottom-2 -right-2 w-6 h-6 bg-white border-2 border-indigo-500 rounded-full cursor-nwse-resize z-30 flex items-center justify-center shadow-sm"
+                          onMouseDown={(e) => handlePointerDown(e, obj.id, 'resize')}
+                          onTouchStart={(e) => handlePointerDown(e, obj.id, 'resize')}
+                        >
+                          <Maximize2 size={10} className="text-indigo-500 transform rotate-90" />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Hint Overlay if empty */}
+              {objects.length === 0 && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur text-white text-xs px-3 py-1.5 rounded-full pointer-events-none animate-pulse">
+                  Start by adding furniture from the left menu
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
