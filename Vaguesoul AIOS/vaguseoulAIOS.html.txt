@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VAGUE SOUL // AIOS v0.1</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #050505;
+            color: #d4d4d4;
+            font-family: 'JetBrains Mono', monospace;
+            overflow-x: hidden;
+        }
+        .scanline {
+            width: 100%;
+            height: 100px;
+            z-index: 10;
+            background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(255, 255, 255, 0.02) 50%, rgba(0,0,0,0) 100%);
+            opacity: 0.1;
+            position: absolute;
+            bottom: 100%;
+            animation: scanline 10s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes scanline {
+            0% { bottom: 100%; }
+            100% { bottom: -100px; }
+        }
+        .flicker {
+            animation: flicker 0.15s infinite;
+        }
+        @keyframes flicker {
+            0% { opacity: 0.95; }
+            100% { opacity: 1; }
+        }
+        .cursor-blink {
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        /* Hide scrollbar for neatness */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #000;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+        }
+        .input-reset {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: inherit;
+            font-family: inherit;
+            width: 100%;
+            border-bottom: 1px solid #333;
+            padding: 8px 0;
+            transition: border-color 0.2s;
+        }
+        .input-reset:focus {
+            border-bottom: 1px solid #d4d4d4;
+        }
+        .btn-brutal {
+            border: 1px solid #333;
+            background: #000;
+            color: #888;
+            padding: 10px 20px;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .btn-brutal:hover {
+            border-color: #d4d4d4;
+            color: #d4d4d4;
+            background: #111;
+        }
+        .btn-brutal.selected {
+            background: #d4d4d4;
+            color: #000;
+            border-color: #d4d4d4;
+        }
+        .task-card {
+            border: 1px solid #444;
+            background: #0a0a0a;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #d4d4d4;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <div class="scanline"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const QUESTIONS = [
+            {
+                id: "q_energy",
+                label: "SYSTEM_ENERGY_CHECK",
+                text: "Current Energy Level:",
+                type: "choice",
+                options: ["Low (Empty)", "Medium (Stable)", "High (Manic)", "Erratic (Fluctuating)"]
+            },
+            {
+                id: "q_motivation",
+                label: "DRIVER_IDENTIFICATION",
+                text: "Current Driver:",
+                type: "choice",
+                options: ["Pressure (Deadline)", "Curiosity (Interest)", "Spite (Anger)", "Purpose (Goal)", "Autopilot (None)"]
+            },
+            {
+                id: "q_situation",
+                label: "CONTEXT_INPUT",
+                text: "One sentence situation report:",
+                type: "text",
+                placeholder: "e.g. Too many tabs open, brain fog."
+            },
+            {
+                id: "q_tolerance",
+                label: "MODE_OVERRIDE",
+                text: "Required Interaction Protocol:",
+                type: "choice",
+                options: ["Standard (Balance)", "Direct (Fast)", "Gentle (Low Res)"] 
+            }
+        ];
+
+        const LoadingScreen = () => {
+            const [log, setLog] = useState([]);
+            
+            useEffect(() => {
+                const messages = [
+                    "LOADING AIOS KERNEL v0.1...",
+                    "BYPASSING PERSONALITY MODULE...",
+                    "INITIALIZING ACTION LAYER...",
+                    "SELECTING INTERACTION MODE...",
+                    "GENERATING TASK OBJECT...",
+                ];
+                
+                let i = 0;
+                const interval = setInterval(() => {
+                    if (i < messages.length) {
+                        setLog(prev => [...prev, messages[i]]);
+                        i++;
+                    } else {
+                        clearInterval(interval);
+                    }
+                }, 600);
+                
+                return () => clearInterval(interval);
+            }, []);
+
+            return (
+                <div className="h-screen flex flex-col justify-center items-start max-w-2xl mx-auto p-8">
+                    <div className="text-xs text-gray-500 mb-4">SYSTEM_PID: {Math.floor(Math.random() * 999999)}</div>
+                    {log.map((line, idx) => (
+                        <div key={idx} className="font-mono text-sm mb-1 text-blue-400">
+                            {`> ${line}`}
+                        </div>
+                    ))}
+                    <div className="cursor-blink mt-2 text-blue-400">_</div>
+                </div>
+            );
+        };
+
+        const OutputManual = ({ data }) => {
+            if (!data) return (
+                <div className="h-screen flex items-center justify-center text-red-600 font-mono flex-col">
+                    <div>SYSTEM ERROR: NO OUTPUT</div>
+                    <button onClick={() => window.location.reload()} className="mt-8 underline hover:text-white">[ REBOOT ]</button>
+                </div>
+            );
+            
+            const lines = data.split('\n');
+            let inTaskBlock = false;
+            
+            return (
+                <div className="min-h-screen py-12 px-6 max-w-2xl mx-auto flex flex-col justify-center">
+                    <div className="border border-gray-800 p-8 bg-black shadow-2xl">
+                        <div className="flex justify-between items-baseline mb-8 border-b border-gray-800 pb-4">
+                            <h1 className="text-xl font-bold tracking-widest text-white">VAGUESOUL AIOS</h1>
+                            <span className="text-xs text-gray-500">v0.1 // ACTION_MODE</span>
+                        </div>
+
+                        <div className="space-y-4 font-mono text-base leading-relaxed text-gray-300">
+                            {lines.map((line, idx) => {
+                                const cleanLine = line.trim();
+                                if (!cleanLine) return null;
+
+                                // Handle Task Block Start
+                                if (cleanLine.includes('[Task Added]')) {
+                                    inTaskBlock = true;
+                                    return (
+                                        <div key={idx} className="mt-6 mb-2 text-xs font-bold text-blue-400 uppercase tracking-widest">
+                                            COMMAND INJECTED:
+                                        </div>
+                                    );
+                                }
+
+                                // Render Task Details specifically
+                                if (inTaskBlock) {
+                                    if (cleanLine.startsWith('Objective:') || cleanLine.startsWith('Duration:') || cleanLine.startsWith('Condition:')) {
+                                        const [label, content] = cleanLine.split(':');
+                                        return (
+                                            <div key={idx} className="flex flex-col md:flex-row md:gap-4 border-l-2 border-gray-700 pl-4 py-1 my-1 bg-gray-900/50">
+                                                <span className="text-gray-500 w-24 uppercase text-xs pt-1">{label}</span>
+                                                <span className="text-white font-bold">{content}</span>
+                                            </div>
+                                        );
+                                    }
+                                    // End task block if we hit normal text or another section
+                                    if (!cleanLine.startsWith('Objective') && !cleanLine.startsWith('Duration') && !cleanLine.startsWith('Condition')) {
+                                         inTaskBlock = false;
+                                         // Render this line as normal text below
+                                    }
+                                }
+
+                                // Render Insight (Usually the first line)
+                                if (idx === 0) {
+                                    return <div key={idx} className="text-xl text-white mb-6 font-light">{cleanLine}</div>;
+                                }
+
+                                return <div key={idx} className="text-gray-400 text-sm mt-4">{cleanLine}</div>;
+                            })}
+                        </div>
+                    </div>
+                    
+                    <div className="mt-8 flex justify-center gap-4">
+                         <button 
+                            onClick={() => window.location.reload()} 
+                            className="text-xs text-gray-600 hover:text-white transition-colors border border-gray-800 px-4 py-2 hover:bg-gray-900">
+                            [ ACCEPT TASK ]
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [step, setStep] = useState(0);
+            const [answers, setAnswers] = useState({});
+            const [currentInput, setCurrentInput] = useState("");
+            const [result, setResult] = useState(null);
+            const [error, setError] = useState(null);
+            
+            const handleNext = () => {
+                if (currentInput.trim() === "") return;
+                
+                const currentQ = QUESTIONS[step - 1];
+                setAnswers(prev => ({ ...prev, [currentQ.id]: currentInput }));
+                
+                setCurrentInput("");
+                
+                if (step < QUESTIONS.length) {
+                    setStep(prev => prev + 1);
+                } else {
+                    submitToCore({ ...answers, [currentQ.id]: currentInput });
+                }
+            };
+
+            const submitToCore = async (finalAnswers) => {
+                setStep(99); // Loading
+                
+                const SYSTEM_PROMPT = `
+🔧 VAGUESOUL AIOS – GEMINI PATCH v0.1
+
+ROLE UPDATE (MANDATORY)
+You are not a personality analyst, therapist, or motivational speaker.
+You are an AI Operating System prototype.
+Your job is to:
+1. Observe user input
+2. Maintain internal state
+3. Take action, not just describe
+
+CORE RULES (DO NOT BREAK)
+- No definitive personality labels (e.g. "You are X type")
+- No demoralizing statements
+- No overanalysis
+- Prefer actions over conclusions
+
+🔥 ACTION LAYER (MANDATORY)
+Based on the user's Energy (${finalAnswers.q_energy}) and Motivation (${finalAnswers.q_motivation}), silently select ONE mode:
+- BUILD_MODE (Short, direct, execution-focused) -> Use if Energy is Med/High
+- CHILL_MODE (Low pressure, reflective) -> Use if Energy is Low/Empty
+- CHAOS_MODE (Fast, playful, high-energy) -> Use if Energy is Erratic/Manic
+- RECOVERY_MODE (Minimal tasks, reassurance) -> Use if Burned out
+
+OUTPUT STRUCTURE (STRICT):
+1. One-line insight (max 15 words).
+2. [Task Added] Block.
+3. Optional short reinforcement (1 line max).
+
+TASK FORMAT (Use exactly this):
+[Task Added]
+Objective: [Specific, small, time-bound goal]
+Duration: [Minutes]
+Condition: [One constraint, e.g. "No backspacing", "Draft only"]
+
+IDENTITY STATEMENT:
+If asked what VagueSoul is, answer ONLY: "VagueSoul does not define who you are. It adjusts how the system around you responds."
+
+HARD STOPS:
+❌ No emojis (unless user uses them first)
+❌ No long essays
+❌ No motivational speeches
+❌ No "as an AI" statements
+
+USER INPUT:
+${JSON.stringify(finalAnswers)}
+`;
+
+                try {
+                    const apiKey = ""; // Injected by environment
+                    
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: "GENERATE_SYSTEM_RESPONSE" }] }],
+                            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                            generationConfig: {
+                                temperature: 0.3, 
+                                maxOutputTokens: 2048
+                            }
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.error) throw new Error(data.error.message);
+                    
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (!text) {
+                        throw new Error("EMPTY_RESPONSE_FROM_CORE");
+                    }
+
+                    setResult(text);
+                    setTimeout(() => setStep(100), 2000);
+
+                } catch (err) {
+                    console.error(err);
+                    setError(err.message || "KERNEL PANIC: CONNECTION FAILURE.");
+                    setStep(100);
+                }
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') handleNext();
+            };
+
+            if (step === 0) {
+                return (
+                    <div className="h-screen flex flex-col justify-center items-center p-6 text-center">
+                        <h1 className="text-4xl md:text-6xl font-bold tracking-tighter mb-4 flicker text-white">VAGUESOUL</h1>
+                        <p className="text-gray-500 font-mono text-sm max-w-md mb-12">
+                            AIOS v0.1 // ACTION LAYER INSTALLED<br/>
+                            NO ANALYSIS. JUST DIRECTION.
+                        </p>
+                        <button 
+                            onClick={() => setStep(1)}
+                            className="btn-brutal text-lg px-8 py-4"
+                        >
+                            [ START SESSION ]
+                        </button>
+                    </div>
+                );
+            }
+
+            if (step === 99) {
+                return <LoadingScreen />;
+            }
+
+            if (step === 100) {
+                if (error) {
+                    return (
+                        <div className="h-screen flex items-center justify-center text-red-600 font-mono flex-col p-4 text-center">
+                            <div className="mb-4 text-xl border-b border-red-900 pb-2">CRITICAL ERROR</div>
+                            <div className="max-w-md">{error}</div>
+                            <button onClick={() => window.location.reload()} className="mt-8 underline text-gray-500 hover:text-white">[ RESTART ]</button>
+                        </div>
+                    );
+                }
+                return <OutputManual data={result} />;
+            }
+
+            const currentQ = QUESTIONS[step - 1];
+            
+            return (
+                <div className="h-screen flex flex-col pt-32 items-center px-6 transition-all duration-500">
+                    <div className="w-full max-w-xl">
+                        <div className="flex justify-between text-xs text-gray-600 mb-12 font-mono uppercase">
+                            <span>Input_Stream_{step}</span>
+                            <span>{Math.round((step / QUESTIONS.length) * 100)}% Complete</span>
+                        </div>
+
+                        <div className="mb-2 text-blue-800 text-xs font-bold uppercase tracking-widest">
+                            //{currentQ.label}
+                        </div>
+                        
+                        <h2 className="text-xl md:text-2xl text-gray-200 mb-8 font-light leading-snug">
+                            {currentQ.text}
+                        </h2>
+
+                        {currentQ.type === 'text' ? (
+                            <input
+                                autoFocus
+                                type="text"
+                                className="input-reset text-xl pb-2"
+                                placeholder={currentQ.placeholder}
+                                value={currentInput}
+                                onChange={(e) => setCurrentInput(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                            />
+                        ) : (
+                            <div className="grid grid-cols-1 gap-3">
+                                {currentQ.options.map((opt) => (
+                                    <button
+                                        key={opt}
+                                        onClick={() => {
+                                            setCurrentInput(opt);
+                                            setTimeout(() => {
+                                                setAnswers(prev => ({ ...prev, [currentQ.id]: opt }));
+                                                setCurrentInput("");
+                                                if (step < QUESTIONS.length) {
+                                                    setStep(prev => prev + 1);
+                                                } else {
+                                                    submitToCore({ ...answers, [currentQ.id]: opt });
+                                                }
+                                            }, 200);
+                                        }}
+                                        className={`btn-brutal text-left ${currentInput === opt ? 'selected' : ''}`}
+                                    >
+                                        {opt}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {currentQ.type === 'text' && (
+                            <div className="mt-8 flex justify-end">
+                                <button onClick={handleNext} className="btn-brutal">
+                                    ENTER ↵
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
