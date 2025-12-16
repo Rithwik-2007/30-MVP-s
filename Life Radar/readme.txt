@@ -1,0 +1,2 @@
+This is a part of my discipline challenge and the proof of my progress. This MVP is called Life Radar.
+This MVP helps the people who want to do something in their life but has no direction. This MVP uses a spider chart to track your stats so if you give your current situation and interest the MVP will generate long term tasks and short term tasks by completing it your stats will increase and the shape on the spider chart looks perfect
