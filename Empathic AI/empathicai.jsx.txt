@@ -1,0 +1,487 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Camera, AlertCircle, Loader2, Brain, MessageSquare, Zap, Activity, Eye, EyeOff } from 'lucide-react';
+
+/**
+ * UTILITIES
+ */
+const loadScript = (src) => {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) {
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+};
+
+const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised'];
+
+// Rolling buffer for smoothing
+class RollingBuffer {
+  constructor(size) {
+    this.size = size;
+    this.buffer = [];
+  }
+
+  add(data) {
+    this.buffer.push(data);
+    if (this.buffer.length > this.size) {
+      this.buffer.shift();
+    }
+  }
+
+  getAverage() {
+    if (this.buffer.length === 0) return {};
+    
+    const sums = {};
+    EMOTIONS.forEach(e => sums[e] = 0);
+    
+    this.buffer.forEach(entry => {
+      EMOTIONS.forEach(e => {
+        if (entry[e]) sums[e] += entry[e];
+      });
+    });
+
+    const avgs = {};
+    EMOTIONS.forEach(e => {
+      avgs[e] = sums[e] / this.buffer.length;
+    });
+    return avgs;
+  }
+}
+
+/**
+ * MAIN COMPONENT
+ */
+export default function EmotionAwareAI() {
+  // -- State --
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [error, setError] = useState(null);
+  const [debugMode, setDebugMode] = useState(true);
+  
+  // Emotion Engine State
+  const [currentEmotion, setCurrentEmotion] = useState('unknown');
+  const [confidence, setConfidence] = useState(0);
+  const [rawProbabilities, setRawProbabilities] = useState({});
+  const [faceDetected, setFaceDetected] = useState(false);
+  
+  // Chat State
+  const [messages, setMessages] = useState([
+    { role: 'assistant', text: 'Hello. I am listening. My responses will adapt to how you are feeling.' }
+  ]);
+  const [input, setInput] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Refs
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const rollingBuffer = useRef(new RollingBuffer(10)); // 10 frame smoothing
+  const stableStateCounter = useRef(0);
+  const lastEmotionRef = useRef('unknown');
+  const chatEndRef = useRef(null);
+
+  // Constants
+  const STABILITY_THRESHOLD = 15; // Frames required to switch emotion state (~0.5 - 1 sec)
+  const CONFIDENCE_THRESHOLD = 0.50;
+
+  // -- Initialization --
+  useEffect(() => {
+    const init = async () => {
+      try {
+        // Load face-api.js from CDN
+        await loadScript('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js');
+        
+        // Load Models
+        const MODEL_URL = 'https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights/';
+        await Promise.all([
+          window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          window.faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+        ]);
+
+        setIsModelLoaded(true);
+      } catch (err) {
+        setError("Failed to load emotion models. Please refresh.");
+        console.error(err);
+      }
+    };
+    init();
+  }, []);
+
+  // -- Camera Handling --
+  const startCamera = async () => {
+    if (!videoRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: {} });
+      videoRef.current.srcObject = stream;
+      setCameraActive(true);
+    } catch (err) {
+      setError("Camera access denied. Emotion features disabled.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+      setCameraActive(false);
+      setFaceDetected(false);
+      setCurrentEmotion('unknown');
+    }
+  };
+
+  // -- Emotion Loop --
+  const handleVideoPlay = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || !isModelLoaded) return;
+
+    const displaySize = { width: video.videoWidth, height: video.videoHeight };
+    window.faceapi.matchDimensions(canvas, displaySize);
+
+    const intervalId = setInterval(async () => {
+      if (!video || video.paused || video.ended) return;
+
+      // 1. Detect
+      const detections = await window.faceapi
+        .detectAllFaces(video, new window.faceapi.TinyFaceDetectorOptions())
+        .withFaceExpressions();
+
+      // Clear canvas
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (detections.length > 0) {
+        setFaceDetected(true);
+        const detection = detections[0]; // Assume single user
+        
+        // Resize and draw box
+        const resizedDetections = window.faceapi.resizeResults(detections, displaySize);
+        window.faceapi.draw.drawDetections(canvas, resizedDetections);
+
+        // 2. Extract & Smooth
+        const expressions = detection.expressions;
+        rollingBuffer.current.add(expressions);
+        
+        const averaged = rollingBuffer.current.getAverage();
+        setRawProbabilities(averaged); // Update debug UI
+
+        // 3. Decision Logic
+        // Find max emotion in averaged data
+        let maxEmotion = 'neutral';
+        let maxVal = 0;
+        Object.entries(averaged).forEach(([e, val]) => {
+          if (val > maxVal) {
+            maxVal = val;
+            maxEmotion = e;
+          }
+        });
+
+        // Stability Check
+        if (maxVal > CONFIDENCE_THRESHOLD) {
+          if (maxEmotion === lastEmotionRef.current) {
+            stableStateCounter.current += 1;
+          } else {
+            stableStateCounter.current = 0;
+            lastEmotionRef.current = maxEmotion;
+          }
+
+          if (stableStateCounter.current > STABILITY_THRESHOLD) {
+            setCurrentEmotion(maxEmotion);
+            setConfidence(maxVal);
+          }
+        }
+      } else {
+        setFaceDetected(false);
+        // Slowly decay emotion if face lost
+        stableStateCounter.current = 0;
+      }
+
+    }, 100); // 100ms polling
+
+    return () => clearInterval(intervalId);
+  };
+
+  // -- Gemini API Interaction --
+  const callGemini = async (userText) => {
+    setIsGenerating(true);
+    const apiKey = ""; // Runtime environment provides this
+    
+    // Construct System Prompt based on Emotion
+    const systemPrompt = `
+      You are an emotion-aware AI companion. 
+      CURRENT USER EMOTION: ${currentEmotion.toUpperCase()} (Confidence: ${(confidence * 100).toFixed(0)}%).
+      
+      INSTRUCTIONS:
+      - If user is SAD/FEARFUL: Be highly empathetic, gentle, and validating. Avoid toxic positivity.
+      - If user is ANGRY/DISGUSTED: Be calm, grounding, and non-defensive. Acknowledge the frustration.
+      - If user is HAPPY/SURPRISED: Be supportive, enthusiastic, and mirror the energy.
+      - If user is NEUTRAL or UNKNOWN: Respond normally and helpfully.
+      
+      Do NOT explicitly state "I see you are sad" unless it flows naturally. Just adapt the TONE.
+      Keep responses concise and conversational.
+    `;
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: userText }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] }
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
+      
+      const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm having trouble processing that right now.";
+      
+      setMessages(prev => [...prev, { role: 'assistant', text: aiText }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', text: "Connection error. I can't respond right now." }]);
+      console.error(err);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSend = () => {
+    if (!input.trim() || isGenerating) return;
+    const userMsg = input;
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setInput('');
+    callGemini(userMsg);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+
+  // -- UI Renders --
+
+  return (
+    <div className="flex h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden">
+      
+      {/* LEFT: Chat Interface */}
+      <div className="flex-1 flex flex-col min-w-0 border-r border-slate-800">
+        
+        {/* Header */}
+        <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 backdrop-blur-sm z-10">
+          <div className="flex items-center gap-2">
+            <Brain className="w-6 h-6 text-indigo-400" />
+            <h1 className="font-bold text-lg">Empathic AI</h1>
+          </div>
+          <div className="flex items-center gap-3">
+             <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2 border ${
+               currentEmotion === 'unknown' ? 'bg-slate-800 border-slate-700 text-slate-400' :
+               currentEmotion === 'happy' ? 'bg-green-900/30 border-green-700 text-green-400' :
+               currentEmotion === 'sad' ? 'bg-blue-900/30 border-blue-700 text-blue-400' :
+               currentEmotion === 'angry' ? 'bg-red-900/30 border-red-700 text-red-400' :
+               'bg-indigo-900/30 border-indigo-700 text-indigo-400'
+             }`}>
+               <Activity className="w-3 h-3" />
+               State: {currentEmotion.toUpperCase()}
+             </div>
+          </div>
+        </div>
+
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map((msg, idx) => (
+            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                msg.role === 'user' 
+                  ? 'bg-indigo-600 text-white rounded-br-none' 
+                  : 'bg-slate-800 text-slate-200 rounded-bl-none'
+              }`}>
+                {msg.text}
+              </div>
+            </div>
+          ))}
+          {isGenerating && (
+            <div className="flex justify-start">
+              <div className="bg-slate-800 rounded-2xl rounded-bl-none px-4 py-3 flex items-center gap-2">
+                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Input Area */}
+        <div className="p-4 border-t border-slate-800 bg-slate-900">
+          <div className="relative">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your message..."
+              disabled={isGenerating}
+              className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 rounded-xl pl-4 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 border border-slate-700 transition-all"
+            />
+            <button 
+              onClick={handleSend}
+              disabled={!input.trim() || isGenerating}
+              className="absolute right-2 top-2 p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-center text-xs text-slate-500 mt-2">
+            AI adapts based on facial expressions. All processing is local.
+          </p>
+        </div>
+      </div>
+
+      {/* RIGHT: Emotion Engine Panel */}
+      <div className="w-[340px] border-l border-slate-800 bg-slate-950 flex flex-col">
+        
+        {/* Camera Feed Container */}
+        <div className="relative aspect-video bg-black overflow-hidden border-b border-slate-800">
+           {!cameraActive && (
+             <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10 p-6 text-center">
+               <Camera className="w-8 h-8 mb-2 opacity-50" />
+               <p className="text-xs">Camera inactive. Emotion detection paused.</p>
+               <button 
+                 onClick={startCamera}
+                 disabled={!isModelLoaded}
+                 className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-md transition-all disabled:opacity-50 disabled:cursor-wait"
+               >
+                 {isModelLoaded ? 'Start Emotion Engine' : 'Loading Models...'}
+               </button>
+             </div>
+           )}
+
+           <video 
+             ref={videoRef} 
+             autoPlay 
+             muted 
+             onPlay={handleVideoPlay}
+             className={`w-full h-full object-cover transform scale-x-[-1] ${!cameraActive ? 'opacity-0' : 'opacity-100'}`}
+           />
+           <canvas 
+             ref={canvasRef}
+             className="absolute top-0 left-0 w-full h-full pointer-events-none transform scale-x-[-1]"
+           />
+           
+           {cameraActive && (
+             <button 
+                onClick={stopCamera}
+                className="absolute top-2 right-2 p-1 bg-black/50 hover:bg-red-900/80 text-white rounded-md backdrop-blur-md transition-colors z-20"
+                title="Stop Camera"
+             >
+                <EyeOff className="w-4 h-4" />
+             </button>
+           )}
+        </div>
+
+        {/* Emotion Metrics / Debug */}
+        <div className="flex-1 p-5 overflow-y-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-yellow-500" />
+              Real-time Metrics
+            </h2>
+            <button 
+              onClick={() => setDebugMode(!debugMode)}
+              className={`text-xs px-2 py-1 rounded border transition-colors ${debugMode ? 'bg-indigo-900/30 border-indigo-700 text-indigo-400' : 'border-slate-700 text-slate-500'}`}
+            >
+              {debugMode ? 'Debug ON' : 'Debug OFF'}
+            </button>
+          </div>
+
+          {!isModelLoaded ? (
+            <div className="flex flex-col items-center justify-center h-32 text-slate-500 animate-pulse">
+              <Loader2 className="w-6 h-6 mb-2 animate-spin" />
+              <span className="text-xs">Loading Neural Nets...</span>
+            </div>
+          ) : !cameraActive ? (
+            <div className="text-xs text-slate-500 text-center py-10 bg-slate-900/50 rounded-lg border border-dashed border-slate-800">
+              Start camera to see live data
+            </div>
+          ) : !faceDetected ? (
+            <div className="flex flex-col items-center justify-center h-32 text-slate-500">
+               <AlertCircle className="w-6 h-6 mb-2 text-yellow-600" />
+               <span className="text-xs font-medium">No Face Detected</span>
+            </div>
+          ) : (
+             <div className="space-y-4">
+               {/* Primary Decision Card */}
+               <div className="bg-slate-900 rounded-lg p-3 border border-slate-800 shadow-sm">
+                 <div className="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Primary State</div>
+                 <div className="flex justify-between items-end">
+                    <span className={`text-xl font-bold capitalize ${
+                      currentEmotion === 'angry' ? 'text-red-400' :
+                      currentEmotion === 'sad' ? 'text-blue-400' :
+                      currentEmotion === 'happy' ? 'text-green-400' : 'text-slate-200'
+                    }`}>
+                      {currentEmotion}
+                    </span>
+                    <span className="text-xs font-mono text-indigo-400">
+                      {(confidence * 100).toFixed(1)}% Conf
+                    </span>
+                 </div>
+                 <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                   <div 
+                      className="h-full bg-indigo-500 transition-all duration-300"
+                      style={{ width: `${confidence * 100}%` }}
+                   />
+                 </div>
+               </div>
+
+               {/* Debug Bars */}
+               {debugMode && (
+                 <div className="space-y-2 pt-2 border-t border-slate-800">
+                   <div className="text-xs text-slate-500 uppercase tracking-wider font-bold mb-2">Raw Probabilities</div>
+                   {Object.entries(rawProbabilities)
+                     .sort(([,a], [,b]) => b - a)
+                     .map(([emotion, score]) => (
+                       <div key={emotion} className="group">
+                         <div className="flex justify-between text-xs mb-0.5">
+                           <span className="text-slate-400 capitalize group-hover:text-slate-200 transition-colors">{emotion}</span>
+                           <span className="text-slate-600 font-mono group-hover:text-slate-400">{(score * 100).toFixed(0)}%</span>
+                         </div>
+                         <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                           <div 
+                             className={`h-full rounded-full transition-all duration-300 ${
+                               emotion === currentEmotion ? 'bg-indigo-500' : 'bg-slate-600 opacity-50'
+                             }`} 
+                             style={{ width: `${score * 100}%` }} 
+                           />
+                         </div>
+                       </div>
+                   ))}
+                 </div>
+               )}
+             </div>
+          )}
+        </div>
+        
+        {/* Footer info */}
+        <div className="p-4 border-t border-slate-800 text-[10px] text-slate-600 text-center">
+          Running face-api.js | Local Processing
+        </div>
+      </div>
+    </div>
+  );
+}
