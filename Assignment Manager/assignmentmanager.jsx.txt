@@ -1,0 +1,633 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  onSnapshot, 
+  query, 
+  updateDoc, 
+  deleteDoc,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { LucideClock, LucideFileText, LucideSend, LucidePlus, LucideUser, LucideBookOpen, LucideChevronRight, LucideAlertTriangle, LucideCheckCircle, LucideDownload, LucideInfo } from 'lucide-react';
+
+// --- Firebase Configuration ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'assignment-os-mvp';
+
+// --- Constants ---
+const API_KEY = ""; // Environment provides this
+const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
+
+// --- Utility: AI Clarification Engine ---
+async function askAIClarification(question, assignmentDescription) {
+  const systemPrompt = `
+    You are a College Assignment Assistant. 
+    Your ONLY job is to explain the following assignment description provided by a professor.
+    
+    RULES:
+    1. Answer ONLY based on the provided description.
+    2. If the answer is not explicitly in the description, say: "This part is not clearly specified by the professor."
+    3. NO guessing.
+    4. NO adding new requirements.
+    5. Use simple, plain language.
+    
+    ASSIGNMENT DESCRIPTION:
+    "${assignmentDescription}"
+  `;
+
+  let delay = 1000;
+  for (let i = 0; i < 5; i++) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: question }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        })
+      });
+
+      if (!response.ok) throw new Error('API request failed');
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't process that request.";
+    } catch (err) {
+      if (i === 4) return "Connection error. Please try again later.";
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
+}
+
+// --- Components ---
+
+const Header = ({ user, role, setRole, logout }) => (
+  <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+    <div className="flex items-center gap-2">
+      <div className="bg-blue-600 p-2 rounded-lg">
+        <LucideBookOpen className="text-white w-6 h-6" />
+      </div>
+      <h1 className="text-xl font-bold tracking-tight text-gray-900">Assignment OS</h1>
+    </div>
+    <div className="flex items-center gap-4">
+      <div className="flex bg-gray-100 p-1 rounded-md">
+        <button 
+          onClick={() => setRole('student')}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${role === 'student' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}
+        >
+          Student
+        </button>
+        <button 
+          onClick={() => setRole('professor')}
+          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${role === 'professor' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}
+        >
+          Professor
+        </button>
+      </div>
+      <div className="text-xs text-gray-400 font-mono hidden md:block">
+        UID: {user?.uid.slice(0, 8)}...
+      </div>
+    </div>
+  </header>
+);
+
+const CountdownTimer = ({ deadline }) => {
+  const [timeLeft, setTimeLeft] = useState('');
+  const [isPast, setIsPast] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date().getTime();
+      const target = new Date(deadline).getTime();
+      const diff = target - now;
+
+      if (diff <= 0) {
+        setTimeLeft('DEADLINE PASSED');
+        setIsPast(true);
+        clearInterval(timer);
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setTimeLeft(`${days}d ${hours}h ${mins}m ${secs}s`);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [deadline]);
+
+  return (
+    <div className={`flex items-center gap-2 font-mono text-sm px-3 py-1.5 rounded-full ${isPast ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+      <LucideClock size={16} />
+      <span>{timeLeft}</span>
+    </div>
+  );
+};
+
+const ProfessorDashboard = ({ assignments, submissions, onCreate }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [viewingSubs, setViewingSubs] = useState(null);
+
+  const stats = {
+    total: assignments.length,
+    active: assignments.filter(a => new Date(a.deadline) > new Date()).length
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto p-6">
+      <div className="flex justify-between items-end mb-8">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900">Professor Hub</h2>
+          <p className="text-gray-500 mt-1">Manage assignments and track student progress.</p>
+        </div>
+        <button 
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold transition-all shadow-sm"
+        >
+          <LucidePlus size={20} /> New Assignment
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+          <p className="text-gray-500 text-sm font-medium uppercase tracking-wider">Total Assignments</p>
+          <p className="text-4xl font-bold text-gray-900 mt-1">{stats.total}</p>
+        </div>
+        <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+          <p className="text-gray-500 text-sm font-medium uppercase tracking-wider">Active Deadlines</p>
+          <p className="text-4xl font-bold text-blue-600 mt-1">{stats.active}</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {assignments.length === 0 ? (
+          <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl py-12 text-center text-gray-500">
+            No assignments created yet. Click "New Assignment" to start.
+          </div>
+        ) : (
+          assignments.map(a => (
+            <div key={a.id} className="bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-300 transition-colors shadow-sm">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-1">
+                    <span className="text-xs font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded uppercase tracking-tighter">{a.subject}</span>
+                    <h3 className="text-lg font-bold text-gray-900">{a.title}</h3>
+                  </div>
+                  <p className="text-gray-600 text-sm line-clamp-2 mt-2">{a.description}</p>
+                </div>
+                <div className="text-right">
+                  <CountdownTimer deadline={a.deadline} />
+                  <button 
+                    onClick={() => setViewingSubs(a)}
+                    className="mt-4 text-blue-600 text-sm font-bold flex items-center justify-end gap-1 hover:underline"
+                  >
+                    View Submissions ({submissions.filter(s => s.assignmentId === a.id).length}) <LucideChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* New Assignment Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-xl font-bold">Create Assignment</h3>
+              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.target);
+              onCreate({
+                title: formData.get('title'),
+                subject: formData.get('subject'),
+                description: formData.get('description'),
+                deadline: formData.get('deadline'),
+                allowedTypes: formData.get('types'),
+                maxSize: formData.get('size'),
+              });
+              setShowForm(false);
+            }} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Title</label>
+                  <input name="title" required className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Term Paper" />
+                </div>
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Subject</label>
+                  <input name="subject" required className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="CS-101" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Detailed Description</label>
+                <textarea name="description" required rows="4" className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Clearly explain what is required..."></textarea>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Hard Deadline</label>
+                  <input name="deadline" type="datetime-local" required className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Allowed Files</label>
+                  <input name="types" defaultValue="PDF, DOCX, ZIP" className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2 text-gray-600 font-medium">Cancel</button>
+                <button type="submit" className="bg-blue-600 text-white px-8 py-2 rounded-lg font-bold shadow-lg shadow-blue-200">Post Assignment</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Viewing Submissions Modal */}
+      {viewingSubs && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-bold">Submissions</h3>
+                <p className="text-sm text-gray-500">{viewingSubs.title}</p>
+              </div>
+              <button onClick={() => setViewingSubs(null)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left border-b border-gray-100 text-gray-400 text-xs uppercase tracking-widest font-bold">
+                    <th className="pb-3 px-2">Student ID</th>
+                    <th className="pb-3 px-2">File Name</th>
+                    <th className="pb-3 px-2">Submitted At</th>
+                    <th className="pb-3 px-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {submissions.filter(s => s.assignmentId === viewingSubs.id).length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="py-12 text-center text-gray-400 italic">No submissions yet.</td>
+                    </tr>
+                  ) : (
+                    submissions.filter(s => s.assignmentId === viewingSubs.id).map(s => (
+                      <tr key={s.id} className="text-sm hover:bg-gray-50 transition-colors">
+                        <td className="py-4 px-2 font-mono font-medium">{s.userId.slice(0, 12)}...</td>
+                        <td className="py-4 px-2 text-gray-900">{s.fileName}</td>
+                        <td className="py-4 px-2 text-gray-500">{s.submittedAt?.toDate().toLocaleString()}</td>
+                        <td className="py-4 px-2 text-right">
+                          <button className="text-blue-600 hover:text-blue-800 flex items-center gap-1 justify-end font-bold">
+                            <LucideDownload size={14} /> Download
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AIClarificationBot = ({ description }) => {
+  const [messages, setMessages] = useState([
+    { role: 'ai', text: 'Hi! Ask me anything about this assignment\'s requirements. I only answer based on the professor\'s instructions.' }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
+    const q = input;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: q }]);
+    setLoading(true);
+
+    const answer = await askAIClarification(q, description);
+    setMessages(prev => [...prev, { role: 'ai', text: answer }]);
+    setLoading(false);
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl flex flex-col h-[400px] shadow-sm overflow-hidden">
+      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span className="text-xs font-bold text-gray-600 uppercase">AI Clarification Engine</span>
+        </div>
+        <LucideInfo size={14} className="text-gray-400 cursor-help" title="Answers derived strictly from professor instructions." />
+      </div>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'ai' ? 'justify-start' : 'justify-end'}`}>
+            <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+              m.role === 'ai' ? 'bg-gray-100 text-gray-800' : 'bg-blue-600 text-white'
+            }`}>
+              {m.text}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-gray-100 px-4 py-2 rounded-2xl flex gap-1 items-center">
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></span>
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></span>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="p-3 border-t border-gray-100 flex gap-2">
+        <input 
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyPress={e => e.key === 'Enter' && handleSend()}
+          placeholder="What's expected for full marks?"
+          className="flex-1 text-sm border border-gray-200 rounded-lg px-3 focus:ring-1 focus:ring-blue-500 outline-none"
+        />
+        <button onClick={handleSend} className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors">
+          <LucideSend size={18} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const StudentDashboard = ({ assignments, submissions, onUpload, user }) => {
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <div className="max-w-6xl mx-auto p-6">
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-gray-900">Your Assignments</h2>
+        <p className="text-gray-500 mt-1">Don't miss a beat. Check deadlines and clarify requirements.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* List */}
+        <div className="lg:col-span-5 space-y-3">
+          {assignments.map(a => {
+            const sub = submissions.find(s => s.assignmentId === a.id && s.userId === user?.uid);
+            const isPast = new Date(a.deadline) < new Date();
+            
+            return (
+              <div 
+                key={a.id} 
+                onClick={() => setSelected(a)}
+                className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                  selected?.id === a.id ? 'border-blue-600 bg-blue-50/30' : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded tracking-widest">{a.subject}</span>
+                  {sub ? (
+                    <span className="text-[10px] font-bold text-green-600 flex items-center gap-1"><LucideCheckCircle size={12}/> Submitted</span>
+                  ) : isPast ? (
+                    <span className="text-[10px] font-bold text-red-500 flex items-center gap-1"><LucideAlertTriangle size={12}/> Missed</span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-blue-500">Pending</span>
+                  )}
+                </div>
+                <h3 className="font-bold text-gray-900 truncate">{a.title}</h3>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-xs text-gray-500 font-mono">
+                    Due: {new Date(a.deadline).toLocaleDateString()}
+                  </span>
+                  <LucideChevronRight size={16} className="text-gray-300" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Detail View */}
+        <div className="lg:col-span-7">
+          {selected ? (
+            <div className="space-y-6">
+              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">{selected.title}</h2>
+                    <p className="text-sm font-semibold text-blue-600">{selected.subject}</p>
+                  </div>
+                  <CountdownTimer deadline={selected.deadline} />
+                </div>
+
+                <div className="prose prose-sm max-w-none text-gray-600 mb-8 border-l-4 border-gray-100 pl-4 py-1">
+                  <p className="whitespace-pre-wrap">{selected.description}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Allowed Formats</p>
+                    <p className="text-sm font-bold text-gray-700">{selected.allowedTypes}</p>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</p>
+                    <p className="text-sm font-bold text-gray-700">
+                      {submissions.find(s => s.assignmentId === selected.id && s.userId === user?.uid) ? '✅ Handed in' : '⏳ Waiting'}
+                    </p>
+                  </div>
+                </div>
+
+                {new Date(selected.deadline) > new Date() ? (
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center text-center">
+                    <LucideFileText className="text-gray-300 w-12 h-12 mb-3" />
+                    <h4 className="font-bold text-gray-900">Upload Your Work</h4>
+                    <p className="text-sm text-gray-500 mb-6">PDF, DOCX, or ZIP only. Overwrites existing submission.</p>
+                    
+                    <label className="bg-blue-600 text-white px-8 py-2.5 rounded-lg font-bold cursor-pointer hover:bg-blue-700 transition-all shadow-md active:scale-95">
+                      Select File
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) onUpload(selected.id, file.name);
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="bg-red-50 border border-red-100 rounded-xl p-6 text-center">
+                    <LucideAlertTriangle className="text-red-400 w-10 h-10 mx-auto mb-2" />
+                    <h4 className="font-bold text-red-900 uppercase tracking-wider">Submission Locked</h4>
+                    <p className="text-sm text-red-700 mt-1">The deadline has passed. No further uploads allowed.</p>
+                  </div>
+                )}
+              </div>
+
+              <AIClarificationBot description={selected.description} />
+            </div>
+          ) : (
+            <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center py-32 text-gray-400">
+              <LucideBookOpen size={48} className="mb-4 opacity-20" />
+              <p className="font-medium">Select an assignment to view details</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Main Application ---
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState('student');
+  const [assignments, setAssignments] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth failed:", err);
+      }
+    };
+    initAuth();
+    
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+    });
+    return () => unsubAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Real-time Assignments
+    const qAssignments = collection(db, 'artifacts', appId, 'public', 'data', 'assignments');
+    const unsubAssignments = onSnapshot(qAssignments, 
+      (snapshot) => {
+        setAssignments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      },
+      (err) => console.error("Firestore error:", err)
+    );
+
+    // Real-time Submissions
+    const qSubmissions = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
+    const unsubSubmissions = onSnapshot(qSubmissions,
+      (snapshot) => {
+        setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      },
+      (err) => console.error("Firestore error:", err)
+    );
+
+    return () => {
+      unsubAssignments();
+      unsubSubmissions();
+    };
+  }, [user]);
+
+  const handleCreateAssignment = async (data) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assignments'), {
+        ...data,
+        createdAt: serverTimestamp(),
+        professorId: user.uid
+      });
+    } catch (err) {
+      console.error("Failed to create:", err);
+    }
+  };
+
+  const handleUpload = async (assignmentId, fileName) => {
+    if (!user) return;
+    const assignment = assignments.find(a => a.id === assignmentId);
+    if (!assignment || new Date(assignment.deadline) < new Date()) {
+      return; // Enforcement
+    }
+
+    try {
+      // Find existing submission for this user/assignment to overwrite
+      const existing = submissions.find(s => s.assignmentId === assignmentId && s.userId === user.uid);
+      
+      if (existing) {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', existing.id), {
+          fileName,
+          submittedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'submissions'), {
+          assignmentId,
+          userId: user.uid,
+          fileName,
+          submittedAt: serverTimestamp()
+        });
+      }
+    } catch (err) {
+      console.error("Upload failed:", err);
+    }
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="flex flex-col items-center">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <p className="mt-4 text-gray-500 font-bold uppercase tracking-widest text-xs">Initializing Assignment OS</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-blue-100">
+      <Header user={user} role={role} setRole={setRole} />
+      
+      <main className="pb-20">
+        {role === 'professor' ? (
+          <ProfessorDashboard 
+            assignments={assignments} 
+            submissions={submissions}
+            onCreate={handleCreateAssignment}
+          />
+        ) : (
+          <StudentDashboard 
+            assignments={assignments} 
+            submissions={submissions} 
+            onUpload={handleUpload}
+            user={user}
+          />
+        )}
+      </main>
+
+      {/* Persistence Indicator */}
+      <div className="fixed bottom-4 left-4 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
+        Sync Active • {appId}
+      </div>
+    </div>
+  );
+}

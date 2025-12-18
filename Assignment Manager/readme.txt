@@ -1,0 +1,2 @@
+This is a part of my discipline challenge and the proof of my progress. This MVP is called Assignment Manager.
+This MVP deals with the most common problem for students which confusion of instructions of an assignments and most of the students zone out while the professor explains the assignment so in this MVP professor give the assignment and a deadline and students can understand it using AI available in the MVP and submit the assignment online.
