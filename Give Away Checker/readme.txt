@@ -1,0 +1,2 @@
+This is a part of my discipline challenge and the proof of my progress. This MVP is called Giveaway Checker.
+This MVP solves the most common problem which is can you trust a giveaway. You just have to paste the caption of the video you have watched and it's URL so the MVP gives a credibility score to it 

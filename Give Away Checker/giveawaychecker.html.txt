@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GiveawayCheck - Credibility Evaluator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight text-slate-900">GiveawayCheck</h1>
+            </div>
+            <span class="text-xs font-medium px-2 py-1 bg-slate-100 rounded-full text-slate-500">MVP Beta</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-3xl mx-auto px-4 py-8 w-full">
+        
+        <!-- Introduction -->
+        <div class="mb-8 text-center">
+            <h2 class="text-2xl font-bold mb-2">Evaluate Giveaway Credibility</h2>
+            <p class="text-slate-500">Analyze influencer giveaways using neutral data signals and language processing.</p>
+        </div>
+
+        <!-- Input Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+            <div class="border-b border-slate-100 flex">
+                <button onclick="switchTab('text')" id="tab-text" class="flex-1 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-blue-50/50">
+                    <i class="fa-solid fa-align-left mr-2"></i> Paste Caption
+                </button>
+                <button onclick="switchTab('link')" id="tab-link" class="flex-1 py-3 text-sm font-medium text-slate-500 hover:text-slate-700">
+                    <i class="fa-solid fa-link mr-2"></i> Link (Simulated)
+                </button>
+            </div>
+
+            <div class="p-6">
+                <!-- Text Input Mode -->
+                <div id="input-text-panel">
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Giveaway Caption / Details</label>
+                    <textarea id="captionInput" class="w-full h-40 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm leading-relaxed" placeholder="Paste the full caption of the giveaway post here..."></textarea>
+                    <p class="text-xs text-slate-400 mt-2 text-right">Privacy Note: Analysis happens locally in your browser.</p>
+                </div>
+
+                <!-- Link Input Mode (Simulation) -->
+                <div id="input-link-panel" class="hidden text-center py-8">
+                    <div class="max-w-md mx-auto">
+                        <i class="fa-brands fa-instagram text-4xl text-slate-300 mb-4"></i>
+                        <p class="text-sm text-slate-600 mb-4">In this MVP demo, direct scraping is disabled. <br>Please copy the text from the post and switch to the <b>Paste Caption</b> tab.</p>
+                        <button onclick="switchTab('text')" class="text-blue-600 text-sm font-medium hover:underline">Go to Text Input &rarr;</button>
+                    </div>
+                </div>
+
+                <!-- Additional Signals Checklist -->
+                <div class="mt-6 border-t border-slate-100 pt-6">
+                    <h3 class="text-sm font-semibold text-slate-900 mb-3">Observable Signals (Optional)</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <label class="flex items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                            <input type="checkbox" id="check-verified" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                            <span class="ml-2 text-sm text-slate-600">Account is Verified (Blue Check)</span>
+                        </label>
+                        <label class="flex items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                            <input type="checkbox" id="check-winners" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                            <span class="ml-2 text-sm text-slate-600">Past winners visible on profile</span>
+                        </label>
+                        <label class="flex items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                            <input type="checkbox" id="check-collab" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                            <span class="ml-2 text-sm text-slate-600">Visible Brand Partnership tag</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mt-6">
+                    <button onclick="analyzeCredibility()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-4 rounded-lg transition-all shadow-md active:scale-[0.99]">
+                        Analyze Credibility
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Section -->
+        <div id="results-container" class="hidden slide-in">
+            <div class="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                <!-- Header / Score -->
+                <div class="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
+                    <div>
+                        <h3 class="text-sm uppercase tracking-wide text-slate-500 font-semibold mb-1">Credibility Score</h3>
+                        <div class="flex items-baseline gap-2">
+                            <span id="score-value" class="text-4xl font-bold text-slate-900">--</span>
+                            <span class="text-slate-400 font-medium">/ 100</span>
+                        </div>
+                    </div>
+                    <div id="risk-badge" class="px-4 py-2 rounded-full text-sm font-bold bg-gray-200 text-gray-700">
+                        Calculating...
+                    </div>
+                </div>
+
+                <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Column 1: Signals & Flags -->
+                    <div class="space-y-6">
+                        <div>
+                            <h4 class="text-sm font-semibold text-slate-900 mb-3 border-b border-slate-100 pb-2">Key Signals</h4>
+                            <ul class="space-y-2 text-sm" id="signal-list">
+                                <!-- Signals injected by JS -->
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h4 class="text-sm font-semibold text-slate-900 mb-3 border-b border-slate-100 pb-2">Language Flags</h4>
+                            <ul class="space-y-2 text-sm text-amber-700" id="flag-list">
+                                <!-- Flags injected by JS -->
+                            </ul>
+                            <div id="no-flags-msg" class="hidden text-sm text-slate-400 italic">No significant language risks detected.</div>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Reasoning -->
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-900 mb-3 border-b border-slate-100 pb-2">Reasoning Summary</h4>
+                        <div class="bg-slate-50 rounded-lg p-4 text-sm text-slate-700 leading-relaxed border border-slate-100">
+                            <p id="reasoning-text">
+                                Analysis pending...
+                            </p>
+                        </div>
+                        
+                        <div class="mt-4 p-3 bg-blue-50 rounded border border-blue-100 flex gap-3">
+                            <i class="fa-solid fa-circle-info text-blue-500 mt-0.5"></i>
+                            <p class="text-xs text-blue-800">
+                                <strong>Disclaimer:</strong> This score is automated based on provided text and signals. It checks for credibility patterns, not actual legitimacy. "High Risk" does not definitively mean a scam, and "Safe" guarantees nothing.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4 text-center">
+                <button onclick="resetAnalysis()" class="text-sm text-slate-500 hover:text-slate-800 underline">Analyze Another</button>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="bg-white border-t border-slate-200 mt-auto py-6">
+        <div class="max-w-3xl mx-auto px-4 text-center text-slate-400 text-sm">
+            <p>&copy; 2025 GiveawayCheck MVP. Built for educational purposes.</p>
+        </div>
+    </footer>
+
+    <script>
+        // --- Configuration & Dictionaries ---
+        
+        const POSITIVE_TERMS = [
+            /terms\s*(?:&|and)\s*conditions/i,
+            /official\s*rules/i,
+            /link\s*in\s*bio/i, // Usually implies structure
+            /no\s*purchase\s*necessary/i,
+            /sponsored/i,
+            /partnership/i,
+            /partner/i,
+            /ad/i
+        ];
+
+        const NEGATIVE_TERMS = [
+            /pay\s*shipping/i,
+            /shipping\s*fee/i,
+            /bank\s*details/i,
+            /credit\s*card/i,
+            /send\s*money/i,
+            /cash\s*app/i,
+            /venmo/i,
+            /wire\s*transfer/i,
+            /kindly/i,
+            /whatsapp/i,
+            /telegram/i
+        ];
+
+        const URGENCY_TERMS = [
+            /hurry/i,
+            /act\s*fast/i,
+            /immediately/i,
+            /last\s*chance/i,
+            /minutes\s*left/i
+        ];
+
+        const WINNER_METHOD_TERMS = [
+            /announce/i,
+            /winner/i,
+            /story/i,
+            /stories/i,
+            /dm\s*the\s*winner/i
+        ];
+
+        // --- Core Logic ---
+
+        function analyzeCredibility() {
+            const text = document.getElementById('captionInput').value;
+            const isVerified = document.getElementById('check-verified').checked;
+            const hasWinners = document.getElementById('check-winners').checked;
+            const hasCollab = document.getElementById('check-collab').checked;
+
+            if (text.trim().length < 10) {
+                alert("Please paste a valid caption to analyze.");
+                return;
+            }
+
+            // 1. Signal Extraction
+            const extractedSignals = {
+                brandMentions: /@[\w._]+/.test(text) || hasCollab, // Regex for mentions or checkbox
+                hasTerms: POSITIVE_TERMS.some(regex => regex.test(text)),
+                hasDeadline: /ends|deadline|closes|until|date/i.test(text),
+                paymentRequest: NEGATIVE_TERMS.some(regex => regex.test(text)),
+                winnerClarity: WINNER_METHOD_TERMS.some(regex => regex.test(text)),
+                verified: isVerified,
+                pastWinners: hasWinners
+            };
+
+            // 2. Language Risk Analysis
+            const flags = [];
+            let languageRiskScore = 0;
+
+            // Check Negative Terms
+            NEGATIVE_TERMS.forEach(regex => {
+                const match = text.match(regex);
+                if (match) {
+                    flags.push(`Financial request detected: "${match[0]}"`);
+                    languageRiskScore += 25;
+                }
+            });
+
+            // Check Urgency
+            let urgencyCount = 0;
+            URGENCY_TERMS.forEach(regex => {
+                if (regex.test(text)) urgencyCount++;
+            });
+            if (urgencyCount > 0) {
+                flags.push("High urgency language detected");
+                languageRiskScore += 10;
+            }
+
+            // Check "DM to claim" pattern (Specific common vector)
+            if (/dm\s*(me|us)\s*to\s*claim/i.test(text)) {
+                flags.push("Requires user to DM to claim (High Risk)");
+                languageRiskScore += 20;
+            }
+
+            // 3. Scoring Logic
+            let score = 50; // Base Score
+
+            // Boosters
+            if (extractedSignals.verified) score += 15;
+            if (extractedSignals.pastWinners) score += 10;
+            if (extractedSignals.hasTerms) score += 15;
+            if (extractedSignals.brandMentions) score += 5;
+            if (extractedSignals.hasDeadline) score += 5;
+            if (extractedSignals.winnerClarity) score += 5;
+
+            // Penalities
+            if (extractedSignals.paymentRequest) score -= 40;
+            score -= languageRiskScore;
+
+            // Clamp Score
+            score = Math.max(0, Math.min(100, score));
+
+            // Determine Risk Level
+            let riskLevel = "Questionable";
+            let badgeClass = "bg-yellow-100 text-yellow-800";
+            
+            if (score >= 70) {
+                riskLevel = "Safe";
+                badgeClass = "bg-green-100 text-green-800";
+            } else if (score < 40) {
+                riskLevel = "High Risk";
+                badgeClass = "bg-red-100 text-red-800";
+            }
+
+            // Generate Reasoning Summary
+            let summary = [];
+            if (extractedSignals.verified) {
+                summary.push("The account is verified, which significantly increases credibility.");
+            } else {
+                summary.push("The account is unverified.");
+            }
+
+            if (extractedSignals.hasTerms) {
+                summary.push("Terms and conditions or rules were detected in the text.");
+            } else {
+                summary.push("No clear reference to official rules or terms was found.");
+            }
+
+            if (flags.length > 0) {
+                summary.push(`Language analysis flagged ${flags.length} potential risk factors, including ${flags[0].toLowerCase()}.`);
+            }
+
+            if (extractedSignals.paymentRequest) {
+                summary.push("CRITICAL: The text mentions payment methods or fees, which is highly atypical for legitimate giveaways.");
+            }
+
+            // --- Render Output ---
+            
+            document.getElementById('score-value').innerText = score;
+            const badge = document.getElementById('risk-badge');
+            badge.innerText = riskLevel;
+            badge.className = `px-4 py-2 rounded-full text-sm font-bold ${badgeClass}`;
+
+            // Render Signals
+            const signalList = document.getElementById('signal-list');
+            signalList.innerHTML = `
+                <li class="flex items-center gap-2">
+                    ${getIcon(extractedSignals.verified)} 
+                    <span>Account Verification</span>
+                </li>
+                <li class="flex items-center gap-2">
+                    ${getIcon(extractedSignals.hasTerms)} 
+                    <span>Terms & Conditions Presence</span>
+                </li>
+                 <li class="flex items-center gap-2">
+                    ${getIcon(extractedSignals.winnerClarity)} 
+                    <span>Winner Announcement Clarity</span>
+                </li>
+                <li class="flex items-center gap-2">
+                    ${getIcon(!extractedSignals.paymentRequest)} 
+                    <span>No Payment Requests</span>
+                </li>
+            `;
+
+            // Render Flags
+            const flagList = document.getElementById('flag-list');
+            const noFlagsMsg = document.getElementById('no-flags-msg');
+            flagList.innerHTML = '';
+            
+            if (flags.length > 0) {
+                noFlagsMsg.classList.add('hidden');
+                flags.forEach(flag => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-2"></i> ${flag}`;
+                    flagList.appendChild(li);
+                });
+            } else {
+                noFlagsMsg.classList.remove('hidden');
+            }
+
+            // Render Reasoning
+            document.getElementById('reasoning-text').innerText = summary.join(" ");
+
+            // Show Result Section
+            document.getElementById('results-container').classList.remove('hidden');
+            document.getElementById('results-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function getIcon(isPositive) {
+            return isPositive 
+                ? `<i class="fa-solid fa-circle-check text-green-500"></i>` 
+                : `<i class="fa-solid fa-circle-xmark text-slate-300"></i>`;
+        }
+
+        // --- UI Utils ---
+
+        function switchTab(tab) {
+            const textTab = document.getElementById('tab-text');
+            const linkTab = document.getElementById('tab-link');
+            const textPanel = document.getElementById('input-text-panel');
+            const linkPanel = document.getElementById('input-link-panel');
+
+            if (tab === 'text') {
+                textTab.className = "flex-1 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-blue-50/50";
+                linkTab.className = "flex-1 py-3 text-sm font-medium text-slate-500 hover:text-slate-700";
+                textPanel.classList.remove('hidden');
+                linkPanel.classList.add('hidden');
+            } else {
+                linkTab.className = "flex-1 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-blue-50/50";
+                textTab.className = "flex-1 py-3 text-sm font-medium text-slate-500 hover:text-slate-700";
+                linkPanel.classList.remove('hidden');
+                textPanel.classList.add('hidden');
+            }
+        }
+
+        function resetAnalysis() {
+            document.getElementById('results-container').classList.add('hidden');
+            document.getElementById('captionInput').focus();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Pre-fill for testing purposes (optional)
+        // document.getElementById('captionInput').value = "GIVEAWAY! Win a new iPhone 15! To enter: 1. Like this post 2. Follow us. Winner announced Friday in stories. No purchase necessary. Terms apply.";
+
+    </script>
+</body>
+</html>
