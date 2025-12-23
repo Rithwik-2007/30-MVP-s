@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayBridge | Payment Diagnostic MVP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .step-active { border-bottom: 3px solid #3b82f6; color: #1e40af; }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="bg-blue-600 p-2 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight text-slate-900">PayBridge</h1>
+            </div>
+            <span class="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-1 rounded">MVP 1.0</span>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        <!-- Intro -->
+        <section class="mb-10 text-center">
+            <h2 class="text-3xl font-bold mb-3">Payment Failed? Let's fix it.</h2>
+            <p class="text-slate-600 max-w-xl mx-auto text-lg">We help you understand why your digital purchase didn't go through and find legal ways to get your games/software.</p>
+        </section>
+
+        <!-- Tool Container -->
+        <div id="app" class="glass-card rounded-2xl shadow-xl overflow-hidden">
+            <!-- Selector View -->
+            <div id="selector-view" class="p-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <!-- Platform -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Platform</label>
+                        <select id="platform" class="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                            <option value="">Select Platform</option>
+                            <option value="steam">Steam</option>
+                            <option value="psn">PlayStation Store</option>
+                            <option value="epic">Epic Games</option>
+                            <option value="nintendo">Nintendo eShop</option>
+                            <option value="xbox">Xbox Store</option>
+                        </select>
+                    </div>
+
+                    <!-- Region -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Region/Country</label>
+                        <select id="region" class="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                            <option value="">Select Region</option>
+                            <option value="india">India</option>
+                            <option value="brazil">Brazil</option>
+                            <option value="global">Other / Global</option>
+                        </select>
+                    </div>
+
+                    <!-- Method -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Payment Method Tried</label>
+                        <select id="method" class="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                            <option value="">Select Method</option>
+                            <option value="upi">UPI / Instant Transfer</option>
+                            <option value="rupay">RuPay Card</option>
+                            <option value="debit">Domestic Debit Card</option>
+                            <option value="credit">International Credit Card</option>
+                            <option value="giftcard">Gift Card</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button id="diagnose-btn" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 text-lg">
+                    Run Diagnostic
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Result View (Hidden by default) -->
+            <div id="result-view" class="hidden p-8 border-t border-slate-200 bg-white">
+                <div class="flex items-start gap-4 mb-6">
+                    <div id="status-icon" class="p-3 rounded-full bg-amber-100 text-amber-600">
+                        <!-- Icon injected by JS -->
+                    </div>
+                    <div>
+                        <h3 id="diagnosis-title" class="text-2xl font-bold text-slate-900">Diagnosis</h3>
+                        <p id="diagnosis-desc" class="text-slate-600 mt-1"></p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
+                    <!-- Legal Alternatives -->
+                    <div class="bg-blue-50 p-6 rounded-xl border border-blue-100">
+                        <h4 class="font-bold text-blue-900 flex items-center gap-2 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.64.304 1.24.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                            Verified Legal Solutions
+                        </h4>
+                        <ul id="alternatives-list" class="space-y-3 text-sm text-slate-700">
+                            <!-- Injected by JS -->
+                        </ul>
+                    </div>
+
+                    <!-- Mediator Concept -->
+                    <div class="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
+                        <h4 class="font-bold text-indigo-900 flex items-center gap-2 mb-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3.005 3.005 0 013.75-2.906z" />
+                            </svg>
+                            Future: Mediator Concept
+                        </h4>
+                        <span class="text-[10px] uppercase font-bold text-indigo-500 tracking-wider">Not Live / Research Phase</span>
+                        <p class="text-xs text-indigo-700 mt-2 mb-4 leading-relaxed">
+                            A trusted local partner could hold funds in escrow and complete the purchase via official corporate accounts on your behalf. This bridges the gap for users without international credit access.
+                        </p>
+                        <button class="w-full py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold opacity-50 cursor-not-allowed">
+                            Notify Me When Beta Opens
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-6 border-t border-slate-100 text-center">
+                    <button id="reset-btn" class="text-slate-500 hover:text-slate-900 text-sm font-semibold underline">Start New Diagnostic</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Educational Footer -->
+        <footer class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 opacity-80">
+            <div class="text-center md:text-left">
+                <h5 class="font-bold text-slate-900 text-sm mb-2">Why do payments fail?</h5>
+                <p class="text-xs text-slate-500">Most failures are due to 3D Secure mismatches, MCC code restrictions by banks, or region-locked payment gateways.</p>
+            </div>
+            <div class="text-center md:text-left">
+                <h5 class="font-bold text-slate-900 text-sm mb-2">Why no piracy?</h5>
+                <p class="text-xs text-slate-500">Piracy exposes you to malware and deprives creators. PayBridge aims to solve the 'Service Problem' by finding legal paths.</p>
+            </div>
+            <div class="text-center md:text-left">
+                <h5 class="font-bold text-slate-900 text-sm mb-2">Is this a wallet?</h5>
+                <p class="text-xs text-slate-500">No. PayBridge MVP does not handle money. It is an information layer to help you navigate digital storefronts.</p>
+            </div>
+        </footer>
+    </main>
+
+    <script>
+        const database = {
+            'steam': {
+                'india': {
+                    'upi': {
+                        'status': 'Partially Supported',
+                        'msg': 'Steam officially supports UPI via Novaplay. However, it often fails due to bank timeouts or if your bank classifies the merchant as "Foreign" despite a local gateway.',
+                        'alts': ['Purchase Steam Gift Cards from Amazon.in or Digistore', 'Enable International Usage on your Debit Card', 'Use the Steam Wallet top-up feature directly']
+                    },
+                    'rupay': {
+                        'status': 'Not Supported',
+                        'msg': 'Most RuPay cards lack the international payment processing required by Steam\'s backend, even if Novaplay is selected.',
+                        'alts': ['Use a Visa/Mastercard from a private bank (HDFC, ICICI)', 'Buy a Digital Gift Card from a verified reseller', 'Try the UPI option during off-peak hours']
+                    }
+                },
+                'global': {
+                    'giftcard': {
+                        'status': 'Supported',
+                        'msg': 'Gift cards are the most reliable method, but ensure the card currency matches your account region to avoid lock-outs.',
+                        'alts': ['Check Humble Bundle or Fanatical for official Steam keys']
+                    }
+                }
+            },
+            'psn': {
+                'india': {
+                    'upi': {
+                        'status': 'Unsupported',
+                        'msg': 'Sony PlayStation Store India does not currently support UPI or local wallets directly in the console storefront.',
+                        'alts': ['Buy PSN Store Top-up Cards from Amazon or GamesTheShop', 'Use a Credit Card with International Transaction enabled', 'Link a PayPal account (if available in your region settings)']
+                    },
+                    'debit': {
+                        'status': 'Hit or Miss',
+                        'msg': 'PlayStation requires cards with "Recurring Payment" or "International Transaction" capability. Standard domestic-only debit cards will fail.',
+                        'alts': ['Request a Global Debit Card from your bank', 'Use Digital Top-up vouchers']
+                    }
+                }
+            },
+            'nintendo': {
+                'global': {
+                    'credit': {
+                        'status': 'Region Locked',
+                        'msg': 'Nintendo is strict about the "Card Region" matching the "eShop Region". A US card will rarely work on an Argentina eShop.',
+                        'alts': ['Change your Nintendo Account region to match your card', 'Buy eShop Credit Codes for that specific region']
+                    }
+                }
+            }
+        };
+
+        const platformEl = document.getElementById('platform');
+        const regionEl = document.getElementById('region');
+        const methodEl = document.getElementById('method');
+        const diagnoseBtn = document.getElementById('diagnose-btn');
+        const selectorView = document.getElementById('selector-view');
+        const resultView = document.getElementById('result-view');
+        const resetBtn = document.getElementById('reset-btn');
+
+        const titleEl = document.getElementById('diagnosis-title');
+        const descEl = document.getElementById('diagnosis-desc');
+        const altsEl = document.getElementById('alternatives-list');
+        const iconEl = document.getElementById('status-icon');
+
+        diagnoseBtn.addEventListener('click', () => {
+            const platform = platformEl.value;
+            const region = regionEl.value;
+            const method = methodEl.value;
+
+            if (!platform || !region || !method) {
+                alert("Please select all three options to run the diagnostic.");
+                return;
+            }
+
+            // Logic matching
+            let result = null;
+            if (database[platform] && database[platform][region] && database[platform][region][method]) {
+                result = database[platform][region][method];
+            } else if (database[platform] && database[platform]['global'] && database[platform]['global'][method]) {
+                result = database[platform]['global'][method];
+            } else {
+                result = {
+                    'status': 'General Friction',
+                    'msg': `This combination for ${platform.toUpperCase()} is known to have compatibility issues in the ${region} region. Digital storefronts often block non-credit methods to prevent fraud.`,
+                    'alts': ['Buy a platform-specific Gift Card (Digital)', 'Contact your bank to enable International/Online transactions', 'Use a specialized gaming payment provider like Razer Gold (if supported)']
+                };
+            }
+
+            renderResult(result);
+        });
+
+        function renderResult(data) {
+            titleEl.innerText = data.status;
+            descEl.innerText = data.msg;
+            altsEl.innerHTML = '';
+            
+            data.alts.forEach(alt => {
+                const li = document.createElement('li');
+                li.className = 'flex items-center gap-2';
+                li.innerHTML = `
+                    <svg class="h-4 w-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    ${alt}
+                `;
+                altsEl.appendChild(li);
+            });
+
+            // Set Icon
+            if (data.status.toLowerCase().includes('supported') && !data.status.toLowerCase().includes('un')) {
+                iconEl.className = 'p-3 rounded-full bg-green-100 text-green-600';
+                iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+            } else {
+                iconEl.className = 'p-3 rounded-full bg-amber-100 text-amber-600';
+                iconEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
+            }
+
+            selectorView.classList.add('hidden');
+            resultView.classList.remove('hidden');
+        }
+
+        resetBtn.addEventListener('click', () => {
+            selectorView.classList.remove('hidden');
+            resultView.classList.add('hidden');
+            platformEl.selectedIndex = 0;
+            regionEl.selectedIndex = 0;
+            methodEl.selectedIndex = 0;
+        });
+    </script>
+</body>
+</html>
