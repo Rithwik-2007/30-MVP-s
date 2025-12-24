@@ -1,0 +1,160 @@
+import { useState, useMemo } from "react";
+import { Helmet } from "react-helmet-async";
+import { Header } from "@/components/Header";
+import { SearchBar } from "@/components/SearchBar";
+import { FilterTabs, type FilterCategory } from "@/components/FilterTabs";
+import { QuestCard } from "@/components/QuestCard";
+import { quests } from "@/data/quests";
+import { Compass, BookOpen, Shield } from "lucide-react";
+
+export default function Index() {
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<FilterCategory>('all');
+  
+  const filteredQuests = useMemo(() => {
+    return quests.filter((quest) => {
+      const matchesSearch = 
+        quest.title.toLowerCase().includes(search.toLowerCase()) ||
+        quest.region.toLowerCase().includes(search.toLowerCase()) ||
+        quest.summary.toLowerCase().includes(search.toLowerCase());
+      
+      const matchesFilter = filter === 'all' || quest.category === filter;
+      
+      return matchesSearch && matchesFilter;
+    });
+  }, [search, filter]);
+  
+  const counts = useMemo(() => {
+    const result: Record<FilterCategory, number> = {
+      all: quests.length,
+      main: 0,
+      secondary: 0,
+      contract: 0,
+      treasure: 0,
+    };
+    
+    quests.forEach((quest) => {
+      result[quest.category]++;
+    });
+    
+    return result;
+  }, []);
+
+  return (
+    <>
+      <Helmet>
+        <title>QuestSense - The Witcher 3 Quest Guide</title>
+        <meta name="description" content="Get unstuck without breaking immersion. QuestSense helps you complete The Witcher 3 quests with minimal spoilers and maximum respect for your time." />
+      </Helmet>
+      
+      <div className="min-h-screen bg-background">
+        <Header />
+        
+        {/* Hero Section */}
+        <section className="relative border-b border-border">
+          <div className="absolute inset-0 gradient-hero" />
+          <div className="relative container py-12 md:py-16">
+            <div className="max-w-2xl mx-auto text-center space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm">
+                <Compass className="w-4 h-4" />
+                <span>The Witcher 3: Wild Hunt</span>
+              </div>
+              
+              <h1 className="font-display text-3xl md:text-4xl lg:text-5xl text-foreground leading-tight">
+                Quest guidance without{" "}
+                <span className="text-primary text-glow">spoilers</span>
+              </h1>
+              
+              <p className="text-muted-foreground text-lg max-w-xl mx-auto">
+                Get unstuck without ruining the experience. Choose how much help you need—from gentle hints to full walkthroughs.
+              </p>
+            </div>
+          </div>
+        </section>
+        
+        {/* Quest List */}
+        <main className="container py-8 md:py-12">
+          <div className="space-y-6">
+            {/* Search and Filter */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+              <div className="w-full sm:w-80">
+                <SearchBar value={search} onChange={setSearch} />
+              </div>
+              <FilterTabs 
+                activeFilter={filter} 
+                onChange={setFilter}
+                counts={counts}
+              />
+            </div>
+            
+            {/* Results */}
+            {filteredQuests.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {filteredQuests.map((quest) => (
+                  <QuestCard key={quest.id} quest={quest} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                  <BookOpen className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-display text-xl text-foreground mb-2">No quests found</h3>
+                <p className="text-muted-foreground">
+                  Try adjusting your search or filter criteria.
+                </p>
+              </div>
+            )}
+          </div>
+        </main>
+        
+        {/* Philosophy Section */}
+        <section className="border-t border-border bg-muted/30">
+          <div className="container py-12 md:py-16">
+            <div className="max-w-3xl mx-auto text-center space-y-6">
+              <h2 className="font-display text-2xl text-foreground">
+                Built for players, not pageviews
+              </h2>
+              <div className="grid gap-6 sm:grid-cols-3 text-left">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Shield className="w-5 h-5" />
+                    <h3 className="font-display text-sm">No Spoilers by Default</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Start with hints. Reveal more only when you need it.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-primary">
+                    <Compass className="w-5 h-5" />
+                    <h3 className="font-display text-sm">Respect Your Time</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Clear steps without padding. Get help and get back to playing.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-primary">
+                    <BookOpen className="w-5 h-5" />
+                    <h3 className="font-display text-sm">Preserve Immersion</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Written like guidance from an experienced Witcher, not a wiki.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        
+        {/* Footer */}
+        <footer className="border-t border-border py-8">
+          <div className="container text-center text-sm text-muted-foreground">
+            <p>QuestSense is a fan project. Not affiliated with CD Projekt Red.</p>
+          </div>
+        </footer>
+      </div>
+    </>
+  );
+}
