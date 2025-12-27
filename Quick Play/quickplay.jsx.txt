@@ -1,0 +1,295 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Layout } from './components/Layout';
+import { POPULAR_GAMES, PLAY_STYLES, GAMER_TAGS } from './constants';
+import { SessionState, Message, Partner, PlayStyle, AppStatus } from './types';
+import { generatePartnerResponse, simulateInitialGreeting } from './services/geminiService';
+
+const App: React.FC = () => {
+  const [state, setState] = useState<SessionState>({
+    status: 'IDLE',
+    selectedGame: POPULAR_GAMES[0].name,
+    selectedStyle: 'Casual',
+    partner: null,
+    messages: [],
+    voiceEnabled: false,
+    partnerVoiceConsent: false,
+    userVoiceConsent: false,
+  });
+
+  const [inputMessage, setInputMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [state.messages, isTyping]);
+
+  const handleStartSearching = () => {
+    setState(prev => ({ ...prev, status: 'SEARCHING' }));
+    
+    // Simulate finding a match
+    setTimeout(async () => {
+      const randomTag = GAMER_TAGS[Math.floor(Math.random() * GAMER_TAGS.length)];
+      const partner: Partner = {
+        id: Math.random().toString(36).substr(2, 9),
+        username: randomTag,
+        game: state.selectedGame,
+        style: state.selectedStyle
+      };
+
+      const greeting = await simulateInitialGreeting(partner);
+      const initialMessage: Message = {
+        id: Date.now().toString(),
+        sender: 'partner',
+        text: greeting,
+        timestamp: Date.now()
+      };
+
+      setState(prev => ({
+        ...prev,
+        status: 'CONNECTED',
+        partner,
+        messages: [initialMessage]
+      }));
+    }, 2500);
+  };
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputMessage.trim() || !state.partner) return;
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      sender: 'user',
+      text: inputMessage,
+      timestamp: Date.now()
+    };
+
+    setState(prev => ({
+      ...prev,
+      messages: [...prev.messages, userMsg]
+    }));
+    setInputMessage('');
+    setIsTyping(true);
+
+    const responseText = await generatePartnerResponse(
+      state.selectedGame,
+      state.selectedStyle,
+      state.partner.username,
+      [...state.messages, userMsg],
+      inputMessage
+    );
+
+    setIsTyping(false);
+    const partnerMsg: Message = {
+      id: (Date.now() + 1).toString(),
+      sender: 'partner',
+      text: responseText,
+      timestamp: Date.now()
+    };
+
+    setState(prev => ({
+      ...prev,
+      messages: [...prev.messages, partnerMsg]
+    }));
+  };
+
+  const toggleVoice = () => {
+    if (!state.userVoiceConsent) {
+      setState(prev => ({ ...prev, userVoiceConsent: true }));
+      // Simulate partner consenting
+      setTimeout(() => {
+        setState(prev => ({ ...prev, partnerVoiceConsent: true, voiceEnabled: true }));
+      }, 1500);
+    } else {
+      setState(prev => ({ ...prev, userVoiceConsent: false, voiceEnabled: false, partnerVoiceConsent: false }));
+    }
+  };
+
+  const endSession = () => {
+    if (confirm("End this session? Chat history will be lost forever.")) {
+      setState({
+        status: 'IDLE',
+        selectedGame: POPULAR_GAMES[0].name,
+        selectedStyle: 'Casual',
+        partner: null,
+        messages: [],
+        voiceEnabled: false,
+        partnerVoiceConsent: false,
+        userVoiceConsent: false,
+      });
+    }
+  };
+
+  return (
+    <Layout>
+      {state.status === 'IDLE' && (
+        <div className="flex-1 flex flex-col justify-center gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-2">Find a teammate. Now.</h2>
+            <p className="text-slate-400 text-sm">No profiles. No history. Just play.</p>
+          </div>
+
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Select Game</label>
+              <select 
+                value={state.selectedGame}
+                onChange={(e) => setState(prev => ({ ...prev, selectedGame: e.target.value }))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl p-4 text-lg focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer"
+              >
+                {POPULAR_GAMES.map(game => (
+                  <option key={game.id} value={game.name}>{game.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Play Style</label>
+              <div className="grid grid-cols-2 gap-2">
+                {PLAY_STYLES.map(style => (
+                  <button
+                    key={style}
+                    onClick={() => setState(prev => ({ ...prev, selectedStyle: style }))}
+                    className={`p-3 rounded-xl border text-sm font-medium transition-all ${
+                      state.selectedStyle === style 
+                      ? 'bg-indigo-600 border-indigo-400 shadow-lg shadow-indigo-900/40 text-white' 
+                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {style}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleStartSearching}
+            className="w-full py-5 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-2xl text-xl shadow-xl shadow-indigo-900/20 active:scale-95 transition-all mt-4"
+          >
+            Find Someone Playing Now
+          </button>
+        </div>
+      )}
+
+      {state.status === 'SEARCHING' && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 text-center animate-in zoom-in-95 duration-300">
+          <div className="relative">
+            <div className="w-24 h-24 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-2xl">🎮</span>
+            </div>
+          </div>
+          <div>
+            <h2 className="text-xl font-bold">Finding a partner...</h2>
+            <p className="text-slate-400 text-sm mt-1">Matching you for {state.selectedGame} ({state.selectedStyle})</p>
+          </div>
+          <button 
+            onClick={() => setState(prev => ({ ...prev, status: 'IDLE' }))}
+            className="text-slate-500 text-sm hover:text-slate-300 underline"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {state.status === 'CONNECTED' && state.partner && (
+        <div className="flex-1 flex flex-col h-full animate-in slide-in-from-right-4 duration-300">
+          <div className="bg-slate-800/50 p-3 rounded-xl flex items-center justify-between mb-4 border border-slate-700/50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
+                {state.partner.username.charAt(0)}
+              </div>
+              <div>
+                <p className="font-bold text-sm leading-none">{state.partner.username}</p>
+                <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">{state.selectedGame} • {state.selectedStyle}</p>
+              </div>
+            </div>
+            <button 
+              onClick={endSession}
+              className="text-xs bg-red-500/10 text-red-400 px-3 py-1.5 rounded-lg border border-red-500/20 font-medium hover:bg-red-500/20"
+            >
+              End Session
+            </button>
+          </div>
+
+          <div 
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto space-y-4 px-1 custom-scrollbar mb-4"
+          >
+            {state.messages.map((msg) => (
+              <div 
+                key={msg.id} 
+                className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm ${
+                  msg.sender === 'user' 
+                  ? 'bg-indigo-600 text-white rounded-tr-none' 
+                  : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
+                }`}>
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+            {isTyping && (
+              <div className="flex justify-start">
+                <div className="bg-slate-800 px-4 py-2.5 rounded-2xl rounded-tl-none border border-slate-700 flex gap-1">
+                  <div className="w-1 h-1 bg-slate-500 rounded-full animate-bounce"></div>
+                  <div className="w-1 h-1 bg-slate-500 rounded-full animate-bounce delay-75"></div>
+                  <div className="w-1 h-1 bg-slate-500 rounded-full animate-bounce delay-150"></div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={toggleVoice}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border transition-all text-sm font-medium ${
+                  state.voiceEnabled 
+                  ? 'bg-green-600 border-green-400 text-white' 
+                  : state.userVoiceConsent 
+                  ? 'bg-orange-500/20 border-orange-500/40 text-orange-400 animate-pulse'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {state.voiceEnabled ? (
+                  <><span>🎙️</span> Voice Active</>
+                ) : state.userVoiceConsent ? (
+                  <>Waiting for Partner...</>
+                ) : (
+                  <><span>🎤</span> Request Voice Call</>
+                )}
+              </button>
+            </div>
+
+            <form onSubmit={handleSendMessage} className="flex gap-2">
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder="Message teammate..."
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+              <button
+                type="submit"
+                className="bg-indigo-500 hover:bg-indigo-400 text-white w-12 h-12 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </Layout>
+  );
+};
+
+export default App;
