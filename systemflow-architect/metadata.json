@@ -1,0 +1,5 @@
+{
+  "name": "SystemFlow Architect",
+  "description": "A high-level system design tool for analyzing architectural flows, trade-offs, and future paths using reasoning-driven AI.",
+  "requestFramePermissions": []
+}
