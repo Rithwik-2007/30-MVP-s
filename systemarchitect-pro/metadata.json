@@ -1,0 +1,5 @@
+{
+  "name": "SystemArchitect Pro",
+  "description": "A professional software architecture design tool that helps users conceptualize, compare, and audit system designs before generating modular starter code.",
+  "requestFramePermissions": []
+}
